@@ -1,21 +1,58 @@
-cmake_minimum_required(VERSION 3.19)
+cmake_minimum_required(VERSION 3.21.1)
 project(UniversityCAD LANGUAGES CXX)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-qt_standard_project_setup()
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Svg)
 
-qt_add_executable(UniversityCAD
-    WIN32 MACOSX_BUNDLE
-    main.cpp
-    mainwindow.cpp
-    mainwindow.h
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTOUIC ON)
+set(CMAKE_AUTORCC ON)
+
+add_executable(UniversityCAD)
+
+target_sources (UniversityCAD PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/Main.cpp
+
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/CadWindow.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/CadWindow.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/Control.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/Control.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/Properties.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/Properties.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/Viewport.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/Viewport.cpp
+
+    ${CMAKE_CURRENT_SOURCE_DIR}/draw/Draw.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/draw/SegmentDraw.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/draw/SegmentDraw.cpp
+
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/Enums.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/Scene.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/Scene.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Object.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Point.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Point.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Segment.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Segment.cpp
 )
 
-target_link_libraries(UniversityCAD
-    PRIVATE
-        Qt::Core
-        Qt::Widgets
+target_include_directories(UniversityCAD PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/objects
+
+    ${CMAKE_CURRENT_SOURCE_DIR}/draw
+
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows
+)
+
+target_link_libraries(UniversityCAD PRIVATE
+    Qt6::Core
+    Qt6::Widgets
+    Qt6::Gui
+    Qt6::Svg
 )
 
 include(GNUInstallDirs)
