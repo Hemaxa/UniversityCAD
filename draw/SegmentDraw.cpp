@@ -1,11 +1,10 @@
 #include "SegmentDraw.h"
 #include "Segment.h"
+
 #include <QPainter>
 #include <QPen>
 
-/**
- * @brief Метод отрисовки отрезка.
- */
+//Метод отрисовки отрезка
 void SegmentDraw::draw(QPainter& painter, Object* primitive) const
 {
     auto* segment = static_cast<Segment*>(primitive);

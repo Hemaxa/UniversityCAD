@@ -14,6 +14,7 @@ add_executable(UniversityCAD)
 
 target_sources (UniversityCAD PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Main.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc
 
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/CadWindow.h
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/CadWindow.cpp

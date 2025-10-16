@@ -1,5 +1,6 @@
 #include "Properties.h"
 #include "Point.h"
+
 #include <QVBoxLayout>
 #include <QFormLayout>
 #include <QStackedWidget>
@@ -9,9 +10,12 @@
 #include <QColorDialog>
 #include <QDoubleSpinBox>
 
+// Конструктор панели свойств.
 Properties::Properties(QWidget *parent)
     : QWidget(parent), m_coordSystem(CoordinateSystemType::Cartesian), m_selectedColor(Qt::white)
 {
+    this->setObjectName("PropertiesPanel");
+
     auto* mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 0, 0);
 
@@ -23,6 +27,7 @@ Properties::Properties(QWidget *parent)
     m_stack->setCurrentWidget(m_segmentWidget);
 }
 
+// Создает и компонует виджеты для ввода параметров отрезка.
 QWidget* Properties::createSegmentWidgets()
 {
     auto* container = new QWidget();
@@ -31,34 +36,35 @@ QWidget* Properties::createSegmentWidgets()
     auto* group = new QGroupBox("Параметры отрезка");
     layout->addWidget(group);
     auto* formLayout = new QFormLayout(group);
+    formLayout->setLabelAlignment(Qt::AlignLeft); // Выравнивание по левому краю.
 
     m_segmentParamsStack = new QStackedWidget();
 
-    // Декартовы
+    // Виджеты для декартовых координат.
     m_cartesianSegmentWidgets = new QWidget();
     auto* cartesianLayout = new QFormLayout(m_cartesianSegmentWidgets);
+    cartesianLayout->setContentsMargins(0,0,0,0);
     m_startXSpin = new QDoubleSpinBox(); m_startYSpin = new QDoubleSpinBox();
     m_endXSpin = new QDoubleSpinBox(); m_endYSpin = new QDoubleSpinBox();
     for(auto* spin : {m_startXSpin, m_startYSpin, m_endXSpin, m_endYSpin}) {
         spin->setRange(-10000, 10000);
         spin->setDecimals(2);
-        spin->setFixedWidth(150); // Установка фиксированной ширины
     }
     cartesianLayout->addRow("Начало X:", m_startXSpin);
     cartesianLayout->addRow("Начало Y:", m_startYSpin);
     cartesianLayout->addRow("Конец X:", m_endXSpin);
     cartesianLayout->addRow("Конец Y:", m_endYSpin);
 
-    // Полярные
+    // Виджеты для полярных координат.
     m_polarSegmentWidgets = new QWidget();
     auto* polarLayout = new QFormLayout(m_polarSegmentWidgets);
+    polarLayout->setContentsMargins(0,0,0,0);
     m_startRadiusSpin = new QDoubleSpinBox(); m_startAngleSpin = new QDoubleSpinBox();
     m_endRadiusSpin = new QDoubleSpinBox(); m_endAngleSpin = new QDoubleSpinBox();
     m_startRadiusSpin->setRange(0, 10000); m_endRadiusSpin->setRange(0, 10000);
     m_startAngleSpin->setRange(-360, 360); m_endAngleSpin->setRange(-360, 360);
     for(auto* spin : {m_startRadiusSpin, m_startAngleSpin, m_endRadiusSpin, m_endAngleSpin}) {
         spin->setDecimals(2);
-        spin->setFixedWidth(110); // Ширина чуть меньше из-за метки
     }
 
     auto* startAngleLayout = new QHBoxLayout();
@@ -79,27 +85,37 @@ QWidget* Properties::createSegmentWidgets()
     m_segmentParamsStack->addWidget(m_polarSegmentWidgets);
     formLayout->addRow(m_segmentParamsStack);
 
-    // Кнопка цвета теперь в общем списке параметров
+    // Кнопка выбора цвета.
     m_colorButton = new QPushButton();
-    m_colorButton->setFixedSize(25, 25);
+    m_colorButton->setObjectName("ColorPickerButton");
     updateColorButton(m_selectedColor);
-    formLayout->addRow("Цвет:", m_colorButton);
 
+    auto* colorContainer = new QWidget();
+    auto* colorLayout = new QHBoxLayout(colorContainer);
+    colorLayout->setContentsMargins(0, 0, 0, 0);
+    colorLayout->addWidget(m_colorButton);
+    colorLayout->addStretch();
+    formLayout->addRow("Цвет:", colorContainer);
+
+    // Кнопка "Создать".
     m_applySegmentButton = new QPushButton("Создать");
-    layout->addWidget(m_applySegmentButton, 0, Qt::AlignCenter);
+    layout->addWidget(m_applySegmentButton);
 
+    // Соединения.
     connect(m_applySegmentButton, &QPushButton::clicked, this, &Properties::onApplySegmentCreation);
     connect(m_colorButton, &QPushButton::clicked, this, &Properties::onColorButtonClicked);
 
     return container;
 }
 
+// Переключает виджеты ввода между декартовыми и полярными координатами.
 void Properties::setCoordinateSystem(CoordinateSystemType type)
 {
     m_coordSystem = type;
     m_segmentParamsStack->setCurrentIndex((type == CoordinateSystemType::Cartesian) ? 0 : 1);
 }
 
+// Обновляет текстовые метки единиц измерения углов.
 void Properties::updateAngleLabels()
 {
     const QString unit = (Point::getAngleUnit() == AngleUnit::Degrees) ? "°" : "rad";
@@ -107,6 +123,7 @@ void Properties::updateAngleLabels()
     m_endAngleLabel->setText(unit);
 }
 
+// Собирает данные из полей ввода и испускает сигнал для создания отрезка.
 void Properties::onApplySegmentCreation()
 {
     Point start, end;
@@ -120,6 +137,7 @@ void Properties::onApplySegmentCreation()
     emit segmentCreateRequested(start, end, m_selectedColor);
 }
 
+// Открывает диалог выбора цвета и обновляет выбранный цвет.
 void Properties::onColorButtonClicked()
 {
     QColor color = QColorDialog::getColor(m_selectedColor, this, "Выберите цвет");
@@ -129,7 +147,8 @@ void Properties::onColorButtonClicked()
     }
 }
 
+// Обновляет цвет фона кнопки выбора цвета.
 void Properties::updateColorButton(const QColor& color)
 {
-    m_colorButton->setStyleSheet(QString("background-color: %1; border-radius: 12px; border: 1px solid gray;").arg(color.name()));
+    m_colorButton->setStyleSheet(QString("background-color: %1;").arg(color.name()));
 }
