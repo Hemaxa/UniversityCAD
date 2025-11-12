@@ -61,10 +61,25 @@ Control::Control(QWidget *parent) : QWidget(parent)
     objectsLayout->addWidget(m_deleteBtn);
 
     // --- 3. Группа "Создание примитивов" ---
-    auto* primitivesGroup = new QGroupBox("Создание примитивов");
-    auto* primitivesLayout = new QVBoxLayout(primitivesGroup);
-    m_createSegmentBtn = new QPushButton("Создать отрезок");
+    auto* primitivesGroup = new QGroupBox("Создание объектов");
+    auto* primitivesLayout = new QHBoxLayout(primitivesGroup);
+    primitivesLayout->setAlignment(Qt::AlignLeft);
+
+    // Группа для кнопок-инструментов (чтобы только одна была активна)
+    m_primitiveToolsGroup = new QButtonGroup(this);
+    m_primitiveToolsGroup->setExclusive(true);
+
+    // Кнопка "Отрезок"
+    m_createSegmentBtn = new QToolButton();
+    m_createSegmentBtn->setCheckable(true);
+    m_createSegmentBtn->setIcon(QIcon(":/icons/segment.svg"));
+    m_createSegmentBtn->setIconSize(QSize(20, 20));
+    m_createSegmentBtn->setProperty("isIconButton", true);
+
+    m_primitiveToolsGroup->addButton(m_createSegmentBtn);
     primitivesLayout->addWidget(m_createSegmentBtn);
+
+    // Сюда можно добавлять другие QToolButton для новых примитивов
 
     // --- Сборка панели ---
     mainLayout->addWidget(sceneGroup);
@@ -78,29 +93,63 @@ Control::Control(QWidget *parent) : QWidget(parent)
     });
     connect(m_cartesianBtn, &QToolButton::clicked, this, &Control::onCartesianClicked);
     connect(m_polarBtn, &QToolButton::clicked, this, &Control::onPolarClicked);
-    connect(m_createSegmentBtn, &QPushButton::clicked, this, [this](){/* ... */});
     connect(m_objectListWidget, &QListWidget::itemSelectionChanged, this, &Control::onSelectionChanged);
     connect(m_deleteBtn, &QPushButton::clicked, this, &Control::deleteRequested);
+
+    // Соединение для кнопки "Отрезок"
+    connect(m_createSegmentBtn, &QToolButton::toggled, this, [this](bool checked){
+        onPrimitiveToolToggled(checked, PrimitiveType::Segment);
+    });
 }
 
 // Обновляет содержимое списка объектов на основе данных из сцены.
 void Control::updateObjectList(const Scene* scene)
 {
     m_objectListWidget->blockSignals(true);
+
+    // Сохраняем ID выбранного объекта, чтобы восстановить выбор
+    Object* currentSelectedObject = nullptr;
+    if (m_objectListWidget->currentItem()) {
+        currentSelectedObject = static_cast<Object*>(m_objectListWidget->currentItem()->data(Qt::UserRole).value<void*>());
+    }
+
     m_objectListWidget->clear();
     if (!scene) {
         m_objectListWidget->blockSignals(false);
         return;
     }
 
-    int segmentCount = 1;
+    QListWidgetItem* itemToSelect = nullptr; // Элемент для восстановления выбора
+
     for (const auto& obj : scene->getPrimitives()) {
+
+        QString itemName;
+
+        // Формируем имя в зависимости от типа объекта
         if (obj->getType() == PrimitiveType::Segment) {
-            QString itemName = QString("Отрезок %1").arg(segmentCount++);
-            QListWidgetItem* item = new QListWidgetItem(itemName, m_objectListWidget);
-            item->setData(Qt::UserRole, QVariant::fromValue(static_cast<void*>(obj.get())));
+            itemName = QString("Отрезок %1").arg(obj->getID());
+        }
+        // else if (obj->getType() == PrimitiveType::Point) {
+        //     itemName = QString("Точка %1").arg(obj->getID());
+        // }
+        else {
+            itemName = QString("Объект %1").arg(obj->getID());
+        }
+
+        QListWidgetItem* item = new QListWidgetItem(itemName, m_objectListWidget);
+        item->setData(Qt::UserRole, QVariant::fromValue(static_cast<void*>(obj.get())));
+
+        // Проверяем, нужно ли восстановить выбор этого элемента
+        if (obj.get() == currentSelectedObject) {
+            itemToSelect = item;
         }
     }
+
+    // Восстанавливаем выбор
+    if (itemToSelect) {
+        itemToSelect->setSelected(true);
+    }
+
     m_objectListWidget->blockSignals(false);
 }
 
@@ -118,5 +167,21 @@ void Control::onSelectionChanged()
 
 // Испускает сигнал о смене системы координат на декартову.
 void Control::onCartesianClicked() { emit coordinateSystemChanged(CoordinateSystemType::Cartesian); }
+
 // Испускает сигнал о смене системы координат на полярную.
 void Control::onPolarClicked() { emit coordinateSystemChanged(CoordinateSystemType::Polar); }
+
+// Слот для обработки переключения инструментов
+void Control::onPrimitiveToolToggled(bool checked, PrimitiveType type)
+{
+    if (checked) {
+        // Если кнопка включена, сообщаем, какой инструмент выбран
+        emit primitiveTypeSelected(type);
+    } else {
+        // Если кнопка выключена (например, кликнули по ней же еще раз)
+        // Проверяем, не является ли *другая* кнопка активной.
+        if (!m_primitiveToolsGroup->checkedButton()) {
+            emit primitiveTypeSelected(PrimitiveType::Generic); // Никакой инструмент не выбран
+        }
+    }
+}

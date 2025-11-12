@@ -7,16 +7,22 @@ AngleUnit Point::s_angleUnit = AngleUnit::Degrees;
 
 // Конструктор класса Point.
 Point::Point(double x, double y) : m_x(x), m_y(y) {}
+
 // Устанавливает глобальную единицу измерения углов (градусы или радианы).
 void Point::setAngleUnit(AngleUnit unit) { s_angleUnit = unit; }
+
 // Возвращает текущую глобальную единицу измерения углов.
 AngleUnit Point::getAngleUnit() { return s_angleUnit; }
+
 // Возвращает координату X точки.
 double Point::getX() const { return m_x; }
+
 // Устанавливает координату X точки.
 void Point::setX(double x) { m_x = x; }
+
 // Возвращает координату Y точки.
 double Point::getY() const { return m_y; }
+
 // Устанавливает координату Y точки.
 void Point::setY(double y) { m_y = y; }
 

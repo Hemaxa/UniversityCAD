@@ -58,7 +58,9 @@ void Viewport::paintEvent(QPaintEvent *event)
     for (const auto& primitive : m_scene->getPrimitives()) {
         auto it = m_drawingStrategies->find(primitive->getType());
         if (it != m_drawingStrategies->end()) {
-            it->second->draw(painter, primitive.get());
+            // Проверяем, является ли текущий примитив выбранным
+            bool isSelected = (primitive.get() == m_selectedObject);
+            it->second->draw(painter, primitive.get(), isSelected);
         }
     }
     painter.restore();
@@ -147,6 +149,7 @@ void Viewport::drawGrid(QPainter& painter)
 void Viewport::drawGizmo(QPainter& painter)
 {
     painter.save();
+    painter.setRenderHint(QPainter::Antialiasing); // Добавим сглаживание для стрелок
     int size = 35, padding = 15;
     QPoint origin(padding + 10, height() - padding - 10);
 
@@ -155,13 +158,32 @@ void Viewport::drawGizmo(QPainter& painter)
 
     // Ось X.
     painter.setPen(axisXPen);
-    painter.drawLine(origin, origin + QPoint(size, 0));
+    painter.setBrush(QColor("#F92672")); // Для заливки стрелки
+    QPoint xEnd = origin + QPoint(size, 0);
+    painter.drawLine(origin, xEnd);
     painter.drawText(origin + QPoint(size + 5, 5), "X");
+
+    // --- Стрелка X ---
+    QPolygonF xArrow;
+    xArrow << xEnd << xEnd - QPointF(8, 4) << xEnd - QPointF(8, -4);
+    painter.drawPolygon(xArrow);
 
     // Ось Y.
     painter.setPen(axisYPen);
-    painter.drawLine(origin, origin - QPoint(0, size));
+    painter.setBrush(QColor("#66D9EF")); // Для заливки стрелки
+    QPoint yEnd = origin - QPoint(0, size);
+    painter.drawLine(origin, yEnd);
     painter.drawText(origin - QPoint(10, size + 5), "Y");
+
+    // --- Стрелка Y ---
+    QPolygonF yArrow;
+    yArrow << yEnd << yEnd + QPointF(-4, 8) << yEnd + QPointF(4, 8);
+    painter.drawPolygon(yArrow);
+
+    // --- Точка в центре Гизмо ---
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(Qt::white);
+    painter.drawEllipse(origin, 2, 2);
 
     painter.restore();
 }
@@ -183,6 +205,15 @@ void Viewport::setGridStep(int step)
 
 // Запрашивает перерисовку виджета.
 void Viewport::update() { QWidget::update(); }
+
+// Устанавливает текущий выбранный объект для подсветки.
+void Viewport::setSelectedObject(Object* obj)
+{
+    if (m_selectedObject != obj) {
+        m_selectedObject = obj;
+        update(); // Запрашиваем перерисовку, чтобы (де)активировать подсветку
+    }
+}
 
 // Преобразует мировые координаты в экранные.
 QPointF Viewport::worldToScreen(const QPointF& worldPos) const {

@@ -137,13 +137,11 @@ QPushButton {
 }
 
 QPushButton:hover { background-color: #FF5995; }
-QPushButton:pressed { background-color: #D3205E;
-}
+QPushButton:pressed { background-color: #D3205E; }
 
 #deleteButton { background-color: #FD971F; color: #1A1B26; }
 #deleteButton:hover { background-color: #FFB86C; }
-#deleteButton:pressed { background-color: #E68A1E;
-}
+#deleteButton:pressed { background-color: #E68A1E; }
 
 QToolButton {
     /* Стиль для кнопок QToolButton. */
@@ -185,18 +183,46 @@ QListWidget::item:selected { background-color: #F92672; color: white; }
     color: #A6E22E;
 }
 
-/* --- ИСПРАВЛЕНИЕ: КРУГЛАЯ КНОПКА ЦВЕТА --- */
 #ColorPickerButton {
     /* Стиль для кнопки выбора цвета, делающий ее круглой. */
     border: 1px solid #777777;
-    min-height: 20px;
-    min-width: 20px;
-    max-height: 20px;
-    max-width: 20px;
-    border-radius: 10px; /* Половина от размера */
+    min-height: 10px;
+    min-width: 10px;
+    max-height: 10px;
+    max-width: 10px;
+    border-radius: 5px; /* Половина от размера */
 }
 
 #ColorPickerButton:hover {
     /* Стиль круглой кнопки при наведении. */
     border: 1px solid #66D9EF;
+}
+
+/* =================================================================== */
+/* КНОПКИ-ИКОНКИ (Icon Buttons) */
+/* =================================================================== */
+
+/* Базовый стиль для кнопки-иконки */
+QToolButton[isIconButton="true"] {
+    /* Задаем размер */
+    min-width: 28px;
+    max-width: 28px;
+    min-height: 28px;
+    max-height: 28px;
+    padding: 4px; /* Внутренний отступ для иконки */
+
+    /* Фон и рамка по умолчанию */
+    background-color: #313241;
+    border: 1px solid #4A4A5A;
+    border-radius: 4px;
+}
+
+/* Рамка розовая при наведении */
+QToolButton[isIconButton="true"]:hover {
+    border-color: #F92672;
+}
+
+/* Рамка розовая при нажатии */
+QToolButton[isIconButton="true"]:checked {
+    border-color: #F92672; /* Рамка тоже розовая */
 }

@@ -24,4 +24,7 @@ public:
 private:
     // Вектор умных указателей на все примитивы, находящиеся на сцене.
     std::vector<std::unique_ptr<Object>> m_primitives;
+
+    // Счетчик для генерации уникальных ID.
+    unsigned int m_nextId;
 };
