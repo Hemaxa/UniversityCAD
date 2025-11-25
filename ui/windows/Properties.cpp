@@ -83,29 +83,36 @@ QWidget* Properties::createSegmentWidgets()
     cartesianLayout->addRow("Конец Y:", m_endYSpin);
 
     // Виджеты для полярных координат.
+    // Изменено: Начальная точка (X, Y), конечная (R, A).
     m_polarSegmentWidgets = new QWidget();
     auto* polarLayout = new QFormLayout(m_polarSegmentWidgets);
     polarLayout->setContentsMargins(0,0,0,0);
-    m_startRadiusSpin = new QDoubleSpinBox(); m_startAngleSpin = new QDoubleSpinBox();
-    m_endRadiusSpin = new QDoubleSpinBox(); m_endAngleSpin = new QDoubleSpinBox();
-    m_startRadiusSpin->setRange(0, 10000); m_endRadiusSpin->setRange(0, 10000);
-    m_startAngleSpin->setRange(-360, 360); m_endAngleSpin->setRange(-360, 360);
-    for(auto* spin : {m_startRadiusSpin, m_startAngleSpin, m_endRadiusSpin, m_endAngleSpin}) {
+
+    // Создаем спинбоксы: X/Y для старта, R/A для конца
+    m_polarStartXSpin = new QDoubleSpinBox();
+    m_polarStartYSpin = new QDoubleSpinBox();
+    m_endRadiusSpin = new QDoubleSpinBox();
+    m_endAngleSpin = new QDoubleSpinBox();
+
+    m_polarStartXSpin->setRange(-10000, 10000);
+    m_polarStartYSpin->setRange(-10000, 10000);
+    m_endRadiusSpin->setRange(0, 10000);
+    m_endAngleSpin->setRange(-360, 360);
+
+    for(auto* spin : {m_polarStartXSpin, m_polarStartYSpin, m_endRadiusSpin, m_endAngleSpin}) {
         spin->setDecimals(2);
         connect(spin, &QDoubleSpinBox::valueChanged, this, &Properties::updateSegmentMetrics);
     }
 
-    auto* startAngleLayout = new QHBoxLayout();
-    startAngleLayout->addWidget(m_startAngleSpin);
-    m_startAngleLabel = new QLabel("°");
-    startAngleLayout->addWidget(m_startAngleLabel);
+    // Лэйаут для угла (чтобы добавить значок градуса)
     auto* endAngleLayout = new QHBoxLayout();
     endAngleLayout->addWidget(m_endAngleSpin);
     m_endAngleLabel = new QLabel("°");
     endAngleLayout->addWidget(m_endAngleLabel);
 
-    polarLayout->addRow("Начало R:", m_startRadiusSpin);
-    polarLayout->addRow("Начало A:", startAngleLayout);
+    // Формируем строки формы согласно ТЗ: (x1, y1) и (r2, theta2)
+    polarLayout->addRow("Начало X:", m_polarStartXSpin);
+    polarLayout->addRow("Начало Y:", m_polarStartYSpin);
     polarLayout->addRow("Конец R:", m_endRadiusSpin);
     polarLayout->addRow("Конец A:", endAngleLayout);
 
@@ -202,7 +209,7 @@ void Properties::setCoordinateSystem(CoordinateSystemType type)
 void Properties::updateAngleLabels()
 {
     const QString unit = (Point::getAngleUnit() == AngleUnit::Degrees) ? "°" : "rad";
-    m_startAngleLabel->setText(unit);
+    // Обновляем метку только для конечного угла
     m_endAngleLabel->setText(unit);
 
     // Аналогично, пересчитываем поля, если в режиме редактирования
@@ -277,7 +284,7 @@ void Properties::populateFields(Segment* segment)
 
     // Блокируем сигналы, чтобы не вызывать updateSegmentMetrics 10 раз
     for(auto* spin : {m_startXSpin, m_startYSpin, m_endXSpin, m_endYSpin,
-                       m_startRadiusSpin, m_startAngleSpin, m_endRadiusSpin, m_endAngleSpin}) {
+                       m_polarStartXSpin, m_polarStartYSpin, m_endRadiusSpin, m_endAngleSpin}) {
         spin->blockSignals(true);
     }
 
@@ -291,8 +298,11 @@ void Properties::populateFields(Segment* segment)
     m_endYSpin->setValue(end.getY());
 
     // Заполняем полярные поля
-    m_startRadiusSpin->setValue(start.getRadius());
-    m_startAngleSpin->setValue(start.getAngle());
+    // Для старта берем X и Y (смешанная логика)
+    m_polarStartXSpin->setValue(start.getX());
+    m_polarStartYSpin->setValue(start.getY());
+
+    // Для конца берем R и Angle
     m_endRadiusSpin->setValue(end.getRadius());
     m_endAngleSpin->setValue(end.getAngle());
 
@@ -302,7 +312,7 @@ void Properties::populateFields(Segment* segment)
 
     // Разблокируем сигналы
     for(auto* spin : {m_startXSpin, m_startYSpin, m_endXSpin, m_endYSpin,
-                       m_startRadiusSpin, m_startAngleSpin, m_endRadiusSpin, m_endAngleSpin}) {
+                       m_polarStartXSpin, m_polarStartYSpin, m_endRadiusSpin, m_endAngleSpin}) {
         spin->blockSignals(false);
     }
 
@@ -333,7 +343,12 @@ void Properties::getPointsFromFields(Point& start, Point& end)
         start.setX(m_startXSpin->value()); start.setY(m_startYSpin->value());
         end.setX(m_endXSpin->value()); end.setY(m_endYSpin->value());
     } else {
-        start.setPolar(m_startRadiusSpin->value(), m_startAngleSpin->value());
+        // Полярные координаты (смешанный режим по ТЗ):
+        // Первая точка задается декартовыми координатами.
+        start.setX(m_polarStartXSpin->value());
+        start.setY(m_polarStartYSpin->value());
+
+        // Вторая точка задается полярными координатами (относительно начала координат).
         end.setPolar(m_endRadiusSpin->value(), m_endAngleSpin->value());
     }
 }

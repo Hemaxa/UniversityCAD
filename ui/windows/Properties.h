@@ -87,8 +87,15 @@ private:
     QStackedWidget* m_segmentParamsStack;
     QWidget* m_cartesianSegmentWidgets;
     QWidget* m_polarSegmentWidgets;
+
+    // Спинбоксы для декартова режима
     QDoubleSpinBox *m_startXSpin, *m_startYSpin, *m_endXSpin, *m_endYSpin;
-    QDoubleSpinBox *m_startRadiusSpin, *m_startAngleSpin, *m_endRadiusSpin, *m_endAngleSpin;
+
+    // Спинбоксы для полярного режима.
+    // Изменено по ТЗ: Начальная точка задается через X/Y, конечная через R/Angle.
+    QDoubleSpinBox *m_polarStartXSpin, *m_polarStartYSpin;
+    QDoubleSpinBox *m_endRadiusSpin, *m_endAngleSpin;
+
     QLabel *m_startAngleLabel, *m_endAngleLabel;
     QLabel *m_segmentLengthLabel, *m_segmentAngleLabel;
     QPushButton* m_colorButton;
