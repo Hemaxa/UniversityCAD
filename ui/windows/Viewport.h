@@ -27,6 +27,7 @@ public:
     void setScene(Scene* scene);
     void setDrawingStrategies(const std::map<PrimitiveType, std::unique_ptr<Draw>>* strategies);
     void setGridStep(int step);
+    void setZoomStep(double step);
 
     // Методы преобразования координат теперь используют камеру
     QPointF worldToScreen(const QPointF& worldPos) const;
@@ -80,6 +81,7 @@ private:
 
     // Параметры навигации (старые удалены, осталась логика взаимодействия)
     int m_gridStep = 50;
+    double m_zoomStep = 1.25;
     QPoint m_lastPanPos;
     bool m_isPanning = false;
 

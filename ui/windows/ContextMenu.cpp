@@ -1,5 +1,7 @@
 #include "ContextMenu.h"
 #include <QAction>
+#include <QIcon>
+#include <QWidget>
 
 ContextMenu::ContextMenu(QWidget* parent) : QMenu(parent)
 {
@@ -9,26 +11,49 @@ ContextMenu::ContextMenu(QWidget* parent) : QMenu(parent)
 
 void ContextMenu::setupActions()
 {
-    // Создание действий меню
-    QAction* zoomInAction = new QAction("Приблизить (+)", this);
+    QWidget* parent = parentWidget(); // Родительский виджет (Viewport)
+
+    // --- Приблизить ---
+    QAction* zoomInAction = new QAction(QIcon(":/icons/zoom_in.svg"), "Приблизить", this);
+    zoomInAction->setShortcuts({QKeySequence::ZoomIn, QKeySequence(Qt::Key_Plus)});
+    // WindowShortcut означает, что клавиша сработает, если окно (Viewport) в фокусе или активно
+    zoomInAction->setShortcutContext(Qt::WindowShortcut);
     connect(zoomInAction, &QAction::triggered, this, &ContextMenu::zoomInTriggered);
     addAction(zoomInAction);
+    // ВАЖНО: Добавляем действие к родителю, чтобы шорткат слушался родителем
+    if (parent) parent->addAction(zoomInAction);
 
-    QAction* zoomOutAction = new QAction("Отдалить (-)", this);
+    // --- Отдалить ---
+    QAction* zoomOutAction = new QAction(QIcon(":/icons/zoom_out.svg"), "Отдалить", this);
+    zoomOutAction->setShortcuts({QKeySequence::ZoomOut, QKeySequence(Qt::Key_Minus)});
+    zoomOutAction->setShortcutContext(Qt::WindowShortcut);
     connect(zoomOutAction, &QAction::triggered, this, &ContextMenu::zoomOutTriggered);
     addAction(zoomOutAction);
+    if (parent) parent->addAction(zoomOutAction);
 
-    QAction* zoomExtAction = new QAction("Показать все", this);
+    // --- Показать все (Fit) ---
+    QAction* zoomExtAction = new QAction(QIcon(":/icons/zoom_extents.svg"), "Показать все", this);
+    zoomExtAction->setShortcut(Qt::Key_F);
+    zoomExtAction->setShortcutContext(Qt::WindowShortcut);
     connect(zoomExtAction, &QAction::triggered, this, &ContextMenu::zoomExtentsTriggered);
     addAction(zoomExtAction);
+    if (parent) parent->addAction(zoomExtAction);
 
     addSeparator();
 
-    QAction* rotateLeftAction = new QAction("Повернуть влево", this);
+    // --- Вращение влево ---
+    QAction* rotateLeftAction = new QAction(QIcon(":/icons/rotate_left.svg"), "Повернуть влево", this);
+    rotateLeftAction->setShortcut(Qt::Key_BracketLeft);
+    rotateLeftAction->setShortcutContext(Qt::WindowShortcut);
     connect(rotateLeftAction, &QAction::triggered, this, &ContextMenu::rotateLeftTriggered);
     addAction(rotateLeftAction);
+    if (parent) parent->addAction(rotateLeftAction);
 
-    QAction* rotateRightAction = new QAction("Повернуть вправо", this);
+    // --- Вращение вправо ---
+    QAction* rotateRightAction = new QAction(QIcon(":/icons/rotate_right.svg"), "Повернуть вправо", this);
+    rotateRightAction->setShortcut(Qt::Key_BracketRight);
+    rotateRightAction->setShortcutContext(Qt::WindowShortcut);
     connect(rotateRightAction, &QAction::triggered, this, &ContextMenu::rotateRightTriggered);
     addAction(rotateRightAction);
+    if (parent) parent->addAction(rotateRightAction);
 }

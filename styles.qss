@@ -201,7 +201,6 @@ QListWidget::item:selected { background-color: #F92672; color: white; }
 /* =================================================================== */
 /* КНОПКИ-ИКОНКИ (Icon Buttons) */
 /* =================================================================== */
-
 /* Базовый стиль для кнопки-иконки */
 QToolButton[isIconButton="true"] {
     /* Задаем размер */
@@ -225,4 +224,33 @@ QToolButton[isIconButton="true"]:hover {
 /* Рамка розовая при нажатии */
 QToolButton[isIconButton="true"]:checked {
     border-color: #F92672; /* Рамка тоже розовая */
+}
+
+/* =================================================================== */
+/* КОНТЕКСТНОЕ МЕНЮ */
+/* =================================================================== */
+QMenu {
+    /* Темный фон и розовая обводка, как у сплиттеров */
+    background-color: #282936;
+    border: 1px solid #F92672;
+    padding: 5px;
+}
+
+QMenu::item {
+    /* Увеличенные отступы и шрифт для удобства */
+    padding: 8px 25px 8px 20px;
+    color: #F0F0F0;
+    font-size: 14px;
+}
+
+QMenu::item:selected {
+    /* Розовая подсветка при наведении */
+    background-color: #F92672;
+    color: white;
+}
+
+QMenu::separator {
+    height: 1px;
+    background-color: #4A4A5A;
+    margin: 5px 10px;
 }

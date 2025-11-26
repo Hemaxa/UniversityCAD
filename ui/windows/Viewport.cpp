@@ -4,14 +4,14 @@
 #include "Draw.h"
 #include "Camera.h"
 #include "ContextMenu.h"
-#include "Segment.h" // Нужен для получения BoundingBox (в будущем лучше вынести в интерфейс Object)
+#include "Segment.h"
 
 #include <QPainter>
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <QLabel>
 #include <QGridLayout>
-#include <QtMath> // Для qSqrt
+#include <QtMath>
 
 Viewport::Viewport(QWidget *parent) : QWidget(parent)
 {
@@ -24,6 +24,7 @@ Viewport::Viewport(QWidget *parent) : QWidget(parent)
 
     // --- Инициализация контекстного меню ---
     m_contextMenu = new ContextMenu(this);
+
     // Связываем сигналы меню со слотами Viewport
     connect(m_contextMenu, &ContextMenu::zoomInTriggered, this, &Viewport::zoomIn);
     connect(m_contextMenu, &ContextMenu::zoomOutTriggered, this, &Viewport::zoomOut);
@@ -38,9 +39,11 @@ Viewport::Viewport(QWidget *parent) : QWidget(parent)
     // UI Инфо-панели
     m_infoLabel = new QLabel(this);
     m_infoLabel->setObjectName("InfoLabel");
-    m_infoLabel->setFixedSize(120, 80); // Чуть увеличил для доп. инфо
+    m_infoLabel->setFixedSize(120, 80);
     m_infoLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    m_infoLabel->setStyleSheet("color: white; background-color: rgba(0, 0, 0, 150); border-radius: 5px; padding: 5px;");
+
+    // Цвет текста #A6E22E (салатовый)
+    m_infoLabel->setStyleSheet("color: #A6E22E; background-color: rgba(18, 18, 18, 0.85); border-radius: 5px; padding: 5px;");
 
     auto* layout = new QGridLayout(this);
     layout->setContentsMargins(15, 15, 15, 15);
@@ -53,7 +56,6 @@ Viewport::Viewport(QWidget *parent) : QWidget(parent)
 
 Viewport::~Viewport()
 {
-    // m_camera и m_contextMenu удалятся автоматически, так как Viewport их родитель
 }
 
 void Viewport::paintEvent(QPaintEvent *event)
@@ -68,10 +70,10 @@ void Viewport::paintEvent(QPaintEvent *event)
     // 1. Получаем матрицу трансформации от камеры
     QTransform worldToScreen = m_camera->getWorldToScreenTransform();
 
-    // 2. Рисуем сетку (передаем трансформацию, чтобы сетка знала границы мира)
+    // 2. Рисуем сетку
     drawGrid(painter, worldToScreen);
 
-    // 3. Рисуем Гизмо (он рисуется поверх, в углу)
+    // 3. Рисуем Гизмо
     drawGizmo(painter);
 
     if (!m_scene || !m_drawingStrategies) return;
@@ -93,21 +95,18 @@ void Viewport::paintEvent(QPaintEvent *event)
 
 void Viewport::drawGrid(QPainter& painter, const QTransform& transform)
 {
-    // Логика отрисовки сетки из ClarusCAD, адаптированная под UniversityCAD
-    QPen gridPen(QColor(50, 52, 71), 1.0); // Просто линии, без точек для скорости
+    QPen gridPen(QColor(50, 52, 71), 1.0);
     QPen axisXPen(QColor("#F92672"), 1.5);
     QPen axisYPen(QColor("#66D9EF"), 1.5);
 
     painter.save();
-    painter.setTransform(transform); // Работаем в мировых координатах
+    painter.setTransform(transform);
 
-    // Определяем видимые границы мира
     QTransform screenToWorldTf = transform.inverted();
     QRectF visibleWorldRect = screenToWorldTf.mapRect(rect());
 
     double step = calculateDynamicGridStep();
 
-    // Вычисляем границы для циклов
     double startX = std::floor(visibleWorldRect.left() / step) * step;
     double endX = std::ceil(visibleWorldRect.right() / step) * step;
     double startY = std::floor(visibleWorldRect.top() / step) * step;
@@ -115,14 +114,14 @@ void Viewport::drawGrid(QPainter& painter, const QTransform& transform)
 
     // Вертикальные линии
     for (double x = startX; x <= endX; x += step) {
-        if (std::abs(x) < 1e-9) painter.setPen(axisYPen); // Ось Y
+        if (std::abs(x) < 1e-9) painter.setPen(axisYPen);
         else painter.setPen(gridPen);
         painter.drawLine(QPointF(x, startY), QPointF(x, endY));
     }
 
     // Горизонтальные линии
     for (double y = startY; y <= endY; y += step) {
-        if (std::abs(y) < 1e-9) painter.setPen(axisXPen); // Ось X
+        if (std::abs(y) < 1e-9) painter.setPen(axisXPen);
         else painter.setPen(gridPen);
         painter.drawLine(QPointF(startX, y), QPointF(endX, y));
     }
@@ -137,7 +136,6 @@ void Viewport::drawGrid(QPainter& painter, const QTransform& transform)
 
 void Viewport::drawGizmo(QPainter& painter)
 {
-    // Гизмо теперь вращается вместе с камерой!
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing);
 
@@ -145,15 +143,11 @@ void Viewport::drawGizmo(QPainter& painter)
     int padding = 50;
     QPoint origin(padding, height() - padding);
 
-    // Создаем матрицу для вращения стрелок гизмо
     QTransform gizmoTransform;
     gizmoTransform.translate(origin.x(), origin.y());
-    // Вращаем в обратную сторону от камеры, чтобы показать ориентацию осей
     gizmoTransform.rotate(-m_camera->getRotationAngle());
-    // Учитываем, что Y на экране вниз
     gizmoTransform.scale(1, -1);
 
-    // Настраиваем кисти
     QPen axisXPen(QColor("#F92672"), 2.0);
     QPen axisYPen(QColor("#66D9EF"), 2.0);
 
@@ -163,12 +157,10 @@ void Viewport::drawGizmo(QPainter& painter)
     painter.setBrush(QColor("#F92672"));
     painter.drawLine(0, 0, size, 0);
 
-    // Стрелка X
     QPolygonF xArrow;
     xArrow << QPointF(size, 0) << QPointF(size - 8, 4) << QPointF(size - 8, -4);
     painter.drawPolygon(xArrow);
 
-    // Текст X (отменяем трансформацию для текста, чтобы он не был перевернут)
     painter.resetTransform();
     QPointF xPos = gizmoTransform.map(QPointF(size + 10, 0));
     painter.setPen(Qt::white);
@@ -180,12 +172,10 @@ void Viewport::drawGizmo(QPainter& painter)
     painter.setBrush(QColor("#66D9EF"));
     painter.drawLine(0, 0, 0, size);
 
-    // Стрелка Y
     QPolygonF yArrow;
     yArrow << QPointF(0, size) << QPointF(-4, size - 8) << QPointF(4, size - 8);
     painter.drawPolygon(yArrow);
 
-    // Текст Y
     painter.resetTransform();
     QPointF yPos = gizmoTransform.map(QPointF(0, size + 10));
     painter.setPen(Qt::white);
@@ -201,19 +191,18 @@ void Viewport::drawGizmo(QPainter& painter)
 
 void Viewport::mousePressEvent(QMouseEvent *event)
 {
-    // Панорамирование по средней кнопке
-    if (event->button() == Qt::MiddleButton) {
+    // ЛКМ используется и для Гизмо, и для Панорамирования
+    if (event->button() == Qt::LeftButton) {
+        if (getGizmoRect().contains(event->pos())) {
+            m_camera->rotateLeft(); // Быстрый поворот кликом по гизмо
+            return;
+        }
+
+        // Панорамирование
         m_isPanning = true;
         m_lastPanPos = event->pos();
         setCursor(Qt::ClosedHandCursor);
     }
-    // Проверка клика по Гизмо для поворота (левый клик)
-    else if (event->button() == Qt::LeftButton) {
-        if (getGizmoRect().contains(event->pos())) {
-            m_camera->rotateLeft(); // Быстрый поворот кликом по гизмо
-        }
-    }
-    // Контекстное меню вызывается автоматически через customContextMenuRequested
 }
 
 void Viewport::mouseMoveEvent(QMouseEvent *event)
@@ -221,11 +210,11 @@ void Viewport::mouseMoveEvent(QMouseEvent *event)
     m_currentMouseWorldPos = screenToWorld(event->position());
     updateInfoLabel();
 
-    // Панорамирование делегируем камере
+    // Панорамирование
     if (m_isPanning) {
         QPoint delta = event->pos() - m_lastPanPos;
         m_lastPanPos = event->pos();
-        m_camera->pan(delta); // Камера сама вызовет update() через сигнал
+        m_camera->pan(delta);
     }
 
     // Смена курсора над гизмо
@@ -238,7 +227,8 @@ void Viewport::mouseMoveEvent(QMouseEvent *event)
 
 void Viewport::mouseReleaseEvent(QMouseEvent *event)
 {
-    if (event->button() == Qt::MiddleButton && m_isPanning) {
+    // Отпускание ЛКМ завершает панорамирование
+    if (event->button() == Qt::LeftButton && m_isPanning) {
         m_isPanning = false;
         setCursor(Qt::ArrowCursor);
     }
@@ -246,7 +236,6 @@ void Viewport::mouseReleaseEvent(QMouseEvent *event)
 
 void Viewport::wheelEvent(QWheelEvent *event)
 {
-    // Зум через камеру
     double factor = 1.0 + (event->angleDelta().y() / 8.0) / 100.0;
     m_camera->applyZoom(factor, event->position().toPoint());
 }
@@ -257,22 +246,37 @@ void Viewport::resizeEvent(QResizeEvent *event)
     QWidget::resizeEvent(event);
 }
 
-// Показать контекстное меню
 void Viewport::showContextMenu(const QPoint& pos)
 {
     m_contextMenu->exec(mapToGlobal(pos));
 }
 
-// Слот обновления от камеры
 void Viewport::onCameraUpdated()
 {
     updateInfoLabel();
-    update(); // Перерисовка виджета
+    update();
 }
 
-// Реализация слотов навигации
-void Viewport::zoomIn() { m_camera->applyZoom(1.25, rect().center()); }
-void Viewport::zoomOut() { m_camera->applyZoom(0.8, rect().center()); }
+// Логика аддитивного зума
+void Viewport::zoomIn()
+{
+    double increment = m_zoomStep - 1.0;
+    double currentZoom = m_camera->getZoomFactor();
+    double targetZoom = currentZoom + increment;
+    double factor = targetZoom / currentZoom;
+    m_camera->applyZoom(factor, rect().center());
+}
+
+void Viewport::zoomOut()
+{
+    double decrement = m_zoomStep - 1.0;
+    double currentZoom = m_camera->getZoomFactor();
+    double targetZoom = currentZoom - decrement;
+    if (targetZoom < 0.05) targetZoom = 0.05;
+    double factor = targetZoom / currentZoom;
+    m_camera->applyZoom(factor, rect().center());
+}
+
 void Viewport::rotateLeft() { m_camera->rotateLeft(); }
 void Viewport::rotateRight() { m_camera->rotateRight(); }
 
@@ -280,14 +284,8 @@ void Viewport::zoomToExtents()
 {
     if (!m_scene) return;
 
-    // Рассчитываем границы всех объектов
     QRectF worldBounds;
     bool first = true;
-
-    // Для этого нам нужно пройтись по примитивам
-    // Внимание: В UniversityCAD примитивы могут не иметь метода getBoundingBox() в базовом классе Object,
-    // но в предоставленных файлах в Segment.h/cpp он тоже не реализован явно (там только getStart/getEnd).
-    // Поэтому реализуем расчет здесь вручную для Segment.
 
     for (const auto& primitive : m_scene->getPrimitives()) {
         if (primitive->getType() == PrimitiveType::Segment) {
@@ -304,12 +302,11 @@ void Viewport::zoomToExtents()
         }
     }
 
-    if (!first) { // Если были объекты
+    if (!first) {
         m_camera->fitBounds(worldBounds);
     }
 }
 
-// Преобразования координат через камеру
 QPointF Viewport::worldToScreen(const QPointF& worldPos) const {
     return m_camera->getWorldToScreenTransform().map(worldPos);
 }
@@ -319,22 +316,15 @@ QPointF Viewport::screenToWorld(const QPointF& screenPos) const {
 }
 
 QRect Viewport::getGizmoRect() const {
-    // Область клика 60x60 в левом нижнем углу
     return QRect(0, height() - 70, 70, 70);
 }
 
-// Привязка к сетке теперь учитывает динамический шаг
 QPointF Viewport::getSnappedPoint(const QPointF& mousePos) const
 {
-    // Преобразуем мышь в мир
     QPointF worldPos = screenToWorld(mousePos);
-
-    // Считаем динамический шаг (как в ClarusCAD)
     double step = calculateDynamicGridStep();
-
     double x = std::round(worldPos.x() / step) * step;
     double y = std::round(worldPos.y() / step) * step;
-
     return QPointF(x, y);
 }
 
@@ -342,19 +332,14 @@ double Viewport::calculateDynamicGridStep() const
 {
     double zoom = m_camera->getZoomFactor();
     double step = m_gridStep;
-
-    // Адаптация шага (алгоритм из ClarusCAD)
     while (step * zoom < 15) step *= 2;
     while (step * zoom > 150) step /= 2;
-
     return step;
 }
 
-// Обновление инфо-лейбла с учетом зума и угла
 void Viewport::updateInfoLabel()
 {
     QString infoText;
-    // ... (логика формирования текста координат такая же) ...
     if (m_coordSystemType == CoordinateSystemType::Cartesian) {
         infoText = QString("X: %1\nY: %2")
         .arg(m_currentMouseWorldPos.x(), 0, 'f', 2)
@@ -368,17 +353,21 @@ void Viewport::updateInfoLabel()
                        .arg(angleUnit);
     }
 
-    // Добавляем инфо о зуме и угле из камеры
-    infoText += QString("\nZoom: %1%").arg(static_cast<int>(m_camera->getZoomFactor() * 100));
-    infoText += QString("\nAngle: %1°").arg(static_cast<int>(m_camera->getRotationAngle()));
+    // Округление процентов зума
+    infoText += QString("\nZoom: %1%").arg(qRound(m_camera->getZoomFactor() * 100));
+
+    // НОРМАЛИЗАЦИЯ УГЛА: Приводим к диапазону [0, 360)
+    int angle = qRound(m_camera->getRotationAngle()) % 360;
+    if (angle < 0) angle += 360;
+    infoText += QString("\nAngle: %1°").arg(angle);
 
     m_infoLabel->setText(infoText);
 }
 
-// Остальные сеттеры
 void Viewport::setScene(Scene* scene) { m_scene = scene; }
 void Viewport::setDrawingStrategies(const std::map<PrimitiveType, std::unique_ptr<Draw>>* strategies) { m_drawingStrategies = strategies; }
 void Viewport::setGridStep(int step) { if (step > 0) { m_gridStep = step; update(); } }
+void Viewport::setZoomStep(double step) { if (step > 0) { m_zoomStep = step; } }
 void Viewport::setCoordinateSystem(CoordinateSystemType type) { m_coordSystemType = type; updateInfoLabel(); }
 void Viewport::setSelectedObject(Object* obj) { m_selectedObject = obj; update(); }
 void Viewport::update() { QWidget::update(); }
