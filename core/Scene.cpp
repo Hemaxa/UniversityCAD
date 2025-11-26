@@ -25,8 +25,6 @@ void Scene::removePrimitive(Object* primitiveToRemove)
                return p.get() == primitiveToRemove;
             }),
         m_primitives.end());
-
-    // Примечание: m_nextId не сбрасывается, чтобы гарантировать уникальность ID.
 }
 
 // Возвращает константную ссылку на вектор всех примитивов.

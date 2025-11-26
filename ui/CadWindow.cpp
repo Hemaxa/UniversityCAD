@@ -12,6 +12,7 @@
 #include <QScreen>
 #include <QGuiApplication>
 
+// Конструктор: создает сцену, настраивает стратегии отрисовки и UI.
 CadWindow::CadWindow(QWidget *parent)
     : QMainWindow(parent),
     m_activePrimitiveType(PrimitiveType::Generic)
@@ -27,11 +28,13 @@ CadWindow::CadWindow(QWidget *parent)
     emit sceneChanged(m_scene);
 }
 
+// Деструктор: удаляет сцену.
 CadWindow::~CadWindow()
 {
     delete m_scene;
 }
 
+// Настраивает внешний вид: создает панели, сплиттеры и задает начальные размеры.
 void CadWindow::setupUi()
 {
     m_viewportPanel = new Viewport(this);
@@ -54,14 +57,11 @@ void CadWindow::setupUi()
     setWindowTitle("UniversityCAD");
 }
 
+// Связывает сигналы от панелей управления с методами окна и вьюпорта.
 void CadWindow::createConnections()
 {
-    // Соединения для настроек сцены и вида.
     connect(m_controlPanel, &Control::gridStepChanged, this, &CadWindow::onGridStepChanged);
-
-    // Новое соединение для шага зума
     connect(m_controlPanel, &Control::zoomStepChanged, m_viewportPanel, &Viewport::setZoomStep);
-
     connect(m_controlPanel, &Control::angleUnitChanged, this, &CadWindow::onAngleUnitChanged);
     connect(m_controlPanel, &Control::coordinateSystemChanged, m_propertiesPanel, &Properties::setCoordinateSystem);
     connect(m_controlPanel, &Control::coordinateSystemChanged, m_viewportPanel, &Viewport::setCoordinateSystem);
@@ -76,22 +76,26 @@ void CadWindow::createConnections()
     connect(this, &CadWindow::sceneChanged, m_controlPanel, &Control::updateObjectList);
 }
 
+// Регистрирует классы отрисовки для поддерживаемых примитивов.
 void CadWindow::setupDrawingStrategies()
 {
     m_drawingStrategies[PrimitiveType::Segment] = std::make_unique<SegmentDraw>();
 }
 
+// Передает новый шаг сетки во вьюпорт.
 void CadWindow::onGridStepChanged(int step)
 {
     m_viewportPanel->setGridStep(step);
 }
 
+// Обновляет глобальную настройку единиц измерения углов.
 void CadWindow::onAngleUnitChanged(AngleUnit unit)
 {
     Point::setAngleUnit(unit);
     m_propertiesPanel->updateAngleLabels();
 }
 
+// Активирует режим создания выбранного примитива.
 void CadWindow::onPrimitiveTypeSelected(PrimitiveType type)
 {
     m_activePrimitiveType = type;
@@ -101,6 +105,7 @@ void CadWindow::onPrimitiveTypeSelected(PrimitiveType type)
     }
 }
 
+// Создает отрезок, добавляет его в сцену и обновляет вид.
 void CadWindow::createSegment(const Point& start, const Point& end, const QColor& color)
 {
     auto newSegment = std::make_unique<Segment>(start, end);
@@ -111,6 +116,7 @@ void CadWindow::createSegment(const Point& start, const Point& end, const QColor
     emit sceneChanged(m_scene);
 }
 
+// Удаляет выбранный объект из сцены и сбрасывает выделение.
 void CadWindow::onDeleteRequested()
 {
     if (m_selectedObject) {
@@ -125,6 +131,7 @@ void CadWindow::onDeleteRequested()
     }
 }
 
+// Обрабатывает выбор объекта: обновляет вьюпорт и переключает панель свойств.
 void CadWindow::onObjectSelected(Object* selectedObject)
 {
     m_selectedObject = selectedObject;
@@ -138,6 +145,7 @@ void CadWindow::onObjectSelected(Object* selectedObject)
     }
 }
 
+// Вызывается при изменении свойств объекта для перерисовки.
 void CadWindow::onObjectModified(Object* obj)
 {
     m_viewportPanel->update();

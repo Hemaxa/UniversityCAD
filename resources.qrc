@@ -2,5 +2,10 @@
     <qresource prefix="/">
         <file>styles.qss</file>
         <file>icons/segment.svg</file>
+        <file>icons/rotate-left.svg</file>
+        <file>icons/rotate-right.svg</file>
+        <file>icons/zoom-extents.svg</file>
+        <file>icons/zoom-in.svg</file>
+        <file>icons/zoom-out.svg</file>
     </qresource>
 </RCC>

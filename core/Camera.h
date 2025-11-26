@@ -6,6 +6,7 @@
 #include <QTransform>
 #include <QPropertyAnimation>
 
+// Класс для камеры окна просмотра.
 class Camera : public QObject
 {
     Q_OBJECT

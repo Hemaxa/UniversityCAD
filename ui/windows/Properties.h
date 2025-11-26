@@ -92,7 +92,6 @@ private:
     QDoubleSpinBox *m_startXSpin, *m_startYSpin, *m_endXSpin, *m_endYSpin;
 
     // Спинбоксы для полярного режима.
-    // Изменено по ТЗ: Начальная точка задается через X/Y, конечная через R/Angle.
     QDoubleSpinBox *m_polarStartXSpin, *m_polarStartYSpin;
     QDoubleSpinBox *m_endRadiusSpin, *m_endAngleSpin;
 

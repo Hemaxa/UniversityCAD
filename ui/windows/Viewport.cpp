@@ -13,36 +13,30 @@
 #include <QGridLayout>
 #include <QtMath>
 
+// Конструктор: инициализирует камеру, меню и информационную панель.
 Viewport::Viewport(QWidget *parent) : QWidget(parent)
 {
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
 
-    // --- Инициализация камеры ---
     m_camera = new Camera(this);
     connect(m_camera, &Camera::updated, this, &Viewport::onCameraUpdated);
 
-    // --- Инициализация контекстного меню ---
     m_contextMenu = new ContextMenu(this);
 
-    // Связываем сигналы меню со слотами Viewport
     connect(m_contextMenu, &ContextMenu::zoomInTriggered, this, &Viewport::zoomIn);
     connect(m_contextMenu, &ContextMenu::zoomOutTriggered, this, &Viewport::zoomOut);
     connect(m_contextMenu, &ContextMenu::zoomExtentsTriggered, this, &Viewport::zoomToExtents);
     connect(m_contextMenu, &ContextMenu::rotateLeftTriggered, this, &Viewport::rotateLeft);
     connect(m_contextMenu, &ContextMenu::rotateRightTriggered, this, &Viewport::rotateRight);
 
-    // Установка политики контекстного меню
     setContextMenuPolicy(Qt::CustomContextMenu);
     connect(this, &QWidget::customContextMenuRequested, this, &Viewport::showContextMenu);
 
-    // UI Инфо-панели
     m_infoLabel = new QLabel(this);
     m_infoLabel->setObjectName("InfoLabel");
     m_infoLabel->setFixedSize(120, 80);
     m_infoLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-
-    // Цвет текста #A6E22E (салатовый)
     m_infoLabel->setStyleSheet("color: #A6E22E; background-color: rgba(18, 18, 18, 0.85); border-radius: 5px; padding: 5px;");
 
     auto* layout = new QGridLayout(this);
@@ -54,35 +48,30 @@ Viewport::Viewport(QWidget *parent) : QWidget(parent)
     updateInfoLabel();
 }
 
+// Деструктор класса Viewport.
 Viewport::~Viewport()
 {
 }
 
+// Основной метод отрисовки виджета. Вызывается системой при обновлении.
 void Viewport::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
-    // Заливка фона
     painter.fillRect(rect(), QColor("#1A1B26"));
 
-    // 1. Получаем матрицу трансформации от камеры
     QTransform worldToScreen = m_camera->getWorldToScreenTransform();
 
-    // 2. Рисуем сетку
     drawGrid(painter, worldToScreen);
-
-    // 3. Рисуем Гизмо
     drawGizmo(painter);
 
     if (!m_scene || !m_drawingStrategies) return;
 
-    // 4. Применяем трансформацию камеры к painter для отрисовки объектов
     painter.save();
     painter.setTransform(worldToScreen);
 
-    // Отрисовка примитивов
     for (const auto& primitive : m_scene->getPrimitives()) {
         auto it = m_drawingStrategies->find(primitive->getType());
         if (it != m_drawingStrategies->end()) {
@@ -93,6 +82,7 @@ void Viewport::paintEvent(QPaintEvent *event)
     painter.restore();
 }
 
+// Отрисовывает координатную сетку.
 void Viewport::drawGrid(QPainter& painter, const QTransform& transform)
 {
     QPen gridPen(QColor(50, 52, 71), 1.0);
@@ -112,21 +102,18 @@ void Viewport::drawGrid(QPainter& painter, const QTransform& transform)
     double startY = std::floor(visibleWorldRect.top() / step) * step;
     double endY = std::ceil(visibleWorldRect.bottom() / step) * step;
 
-    // Вертикальные линии
     for (double x = startX; x <= endX; x += step) {
         if (std::abs(x) < 1e-9) painter.setPen(axisYPen);
         else painter.setPen(gridPen);
         painter.drawLine(QPointF(x, startY), QPointF(x, endY));
     }
 
-    // Горизонтальные линии
     for (double y = startY; y <= endY; y += step) {
         if (std::abs(y) < 1e-9) painter.setPen(axisXPen);
         else painter.setPen(gridPen);
         painter.drawLine(QPointF(startX, y), QPointF(endX, y));
     }
 
-    // Рисуем точку начала координат
     painter.setPen(Qt::NoPen);
     painter.setBrush(Qt::white);
     painter.drawEllipse(QPointF(0,0), 3.0/m_camera->getZoomFactor(), 3.0/m_camera->getZoomFactor());
@@ -134,6 +121,7 @@ void Viewport::drawGrid(QPainter& painter, const QTransform& transform)
     painter.restore();
 }
 
+// Отрисовывает навигационный индикатор (Гизмо) в углу экрана.
 void Viewport::drawGizmo(QPainter& painter)
 {
     painter.save();
@@ -151,7 +139,6 @@ void Viewport::drawGizmo(QPainter& painter)
     QPen axisXPen(QColor("#F92672"), 2.0);
     QPen axisYPen(QColor("#66D9EF"), 2.0);
 
-    // --- Ось X ---
     painter.setTransform(gizmoTransform);
     painter.setPen(axisXPen);
     painter.setBrush(QColor("#F92672"));
@@ -166,7 +153,6 @@ void Viewport::drawGizmo(QPainter& painter)
     painter.setPen(Qt::white);
     painter.drawText(xPos, "X");
 
-    // --- Ось Y ---
     painter.setTransform(gizmoTransform);
     painter.setPen(axisYPen);
     painter.setBrush(QColor("#66D9EF"));
@@ -181,7 +167,6 @@ void Viewport::drawGizmo(QPainter& painter)
     painter.setPen(Qt::white);
     painter.drawText(yPos, "Y");
 
-    // Центр
     painter.setPen(Qt::NoPen);
     painter.setBrush(Qt::white);
     painter.drawEllipse(origin, 3, 3);
@@ -189,35 +174,33 @@ void Viewport::drawGizmo(QPainter& painter)
     painter.restore();
 }
 
+// Обрабатывает нажатие кнопки мыши (ЛКМ для панорамирования или клика по гизмо).
 void Viewport::mousePressEvent(QMouseEvent *event)
 {
-    // ЛКМ используется и для Гизмо, и для Панорамирования
     if (event->button() == Qt::LeftButton) {
         if (getGizmoRect().contains(event->pos())) {
-            m_camera->rotateLeft(); // Быстрый поворот кликом по гизмо
+            m_camera->rotateLeft();
             return;
         }
 
-        // Панорамирование
         m_isPanning = true;
         m_lastPanPos = event->pos();
         setCursor(Qt::ClosedHandCursor);
     }
 }
 
+// Обрабатывает перемещение мыши (обновляет координаты и панорамирует камеру).
 void Viewport::mouseMoveEvent(QMouseEvent *event)
 {
     m_currentMouseWorldPos = screenToWorld(event->position());
     updateInfoLabel();
 
-    // Панорамирование
     if (m_isPanning) {
         QPoint delta = event->pos() - m_lastPanPos;
         m_lastPanPos = event->pos();
         m_camera->pan(delta);
     }
 
-    // Смена курсора над гизмо
     if (!m_isPanning && getGizmoRect().contains(event->pos())) {
         setCursor(Qt::PointingHandCursor);
     } else if (!m_isPanning) {
@@ -225,39 +208,43 @@ void Viewport::mouseMoveEvent(QMouseEvent *event)
     }
 }
 
+// Обрабатывает отпускание кнопки мыши (завершает панорамирование).
 void Viewport::mouseReleaseEvent(QMouseEvent *event)
 {
-    // Отпускание ЛКМ завершает панорамирование
     if (event->button() == Qt::LeftButton && m_isPanning) {
         m_isPanning = false;
         setCursor(Qt::ArrowCursor);
     }
 }
 
+// Обрабатывает прокрутку колеса мыши для зумирования.
 void Viewport::wheelEvent(QWheelEvent *event)
 {
     double factor = 1.0 + (event->angleDelta().y() / 8.0) / 100.0;
     m_camera->applyZoom(factor, event->position().toPoint());
 }
 
+// Обрабатывает изменение размеров окна (обновляет параметры камеры).
 void Viewport::resizeEvent(QResizeEvent *event)
 {
     m_camera->setCanvasSize(event->size());
     QWidget::resizeEvent(event);
 }
 
+// Показывает контекстное меню.
 void Viewport::showContextMenu(const QPoint& pos)
 {
     m_contextMenu->exec(mapToGlobal(pos));
 }
 
+// Обновляет UI при изменении параметров камеры.
 void Viewport::onCameraUpdated()
 {
     updateInfoLabel();
     update();
 }
 
-// Логика аддитивного зума
+// Выполняет дискретное приближение (Zoom In).
 void Viewport::zoomIn()
 {
     double increment = m_zoomStep - 1.0;
@@ -267,6 +254,7 @@ void Viewport::zoomIn()
     m_camera->applyZoom(factor, rect().center());
 }
 
+// Выполняет дискретное отдаление (Zoom Out).
 void Viewport::zoomOut()
 {
     double decrement = m_zoomStep - 1.0;
@@ -277,9 +265,13 @@ void Viewport::zoomOut()
     m_camera->applyZoom(factor, rect().center());
 }
 
+// Поворачивает камеру на 90 градусов влево.
 void Viewport::rotateLeft() { m_camera->rotateLeft(); }
+
+// Поворачивает камеру на 90 градусов вправо.
 void Viewport::rotateRight() { m_camera->rotateRight(); }
 
+// Вычисляет границы всех объектов и подгоняет зум/позицию камеры под них.
 void Viewport::zoomToExtents()
 {
     if (!m_scene) return;
@@ -307,18 +299,22 @@ void Viewport::zoomToExtents()
     }
 }
 
+// Конвертирует мировые координаты в экранные.
 QPointF Viewport::worldToScreen(const QPointF& worldPos) const {
     return m_camera->getWorldToScreenTransform().map(worldPos);
 }
 
+// Конвертирует экранные координаты в мировые.
 QPointF Viewport::screenToWorld(const QPointF& screenPos) const {
     return m_camera->getScreenToWorldTransform().map(screenPos);
 }
 
+// Возвращает прямоугольник области гизмо.
 QRect Viewport::getGizmoRect() const {
     return QRect(0, height() - 70, 70, 70);
 }
 
+// Возвращает координаты, привязанные к ближайшему узлу сетки.
 QPointF Viewport::getSnappedPoint(const QPointF& mousePos) const
 {
     QPointF worldPos = screenToWorld(mousePos);
@@ -328,6 +324,7 @@ QPointF Viewport::getSnappedPoint(const QPointF& mousePos) const
     return QPointF(x, y);
 }
 
+// Рассчитывает шаг сетки в зависимости от зума, чтобы сетка не была слишком плотной или редкой.
 double Viewport::calculateDynamicGridStep() const
 {
     double zoom = m_camera->getZoomFactor();
@@ -337,6 +334,7 @@ double Viewport::calculateDynamicGridStep() const
     return step;
 }
 
+// Обновляет текст в информационном виджете (координаты, зум, угол).
 void Viewport::updateInfoLabel()
 {
     QString infoText;
@@ -353,10 +351,8 @@ void Viewport::updateInfoLabel()
                        .arg(angleUnit);
     }
 
-    // Округление процентов зума
     infoText += QString("\nZoom: %1%").arg(qRound(m_camera->getZoomFactor() * 100));
 
-    // НОРМАЛИЗАЦИЯ УГЛА: Приводим к диапазону [0, 360)
     int angle = qRound(m_camera->getRotationAngle()) % 360;
     if (angle < 0) angle += 360;
     infoText += QString("\nAngle: %1°").arg(angle);
@@ -364,10 +360,23 @@ void Viewport::updateInfoLabel()
     m_infoLabel->setText(infoText);
 }
 
+// Устанавливает сцену для отрисовки.
 void Viewport::setScene(Scene* scene) { m_scene = scene; }
+
+// Устанавливает стратегии отрисовки.
 void Viewport::setDrawingStrategies(const std::map<PrimitiveType, std::unique_ptr<Draw>>* strategies) { m_drawingStrategies = strategies; }
+
+// Устанавливает шаг сетки.
 void Viewport::setGridStep(int step) { if (step > 0) { m_gridStep = step; update(); } }
+
+// Устанавливает шаг зума.
 void Viewport::setZoomStep(double step) { if (step > 0) { m_zoomStep = step; } }
+
+// Устанавливает тип системы координат.
 void Viewport::setCoordinateSystem(CoordinateSystemType type) { m_coordSystemType = type; updateInfoLabel(); }
+
+// Устанавливает текущий выбранный объект.
 void Viewport::setSelectedObject(Object* obj) { m_selectedObject = obj; update(); }
+
+// Принудительное обновление виджета.
 void Viewport::update() { QWidget::update(); }

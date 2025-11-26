@@ -72,7 +72,7 @@ QDoubleSpinBox, QSpinBox, QComboBox, QLineEdit {
 
 QSpinBox {
     /* Устанавливает минимальную ширину для QSpinBox. */
-    min-width: 104px;
+    min-width: 100px;
 }
 
 QDoubleSpinBox:focus, QSpinBox:focus, QComboBox:focus, QLineEdit:focus {
@@ -190,7 +190,8 @@ QListWidget::item:selected { background-color: #F92672; color: white; }
     min-width: 10px;
     max-height: 10px;
     max-width: 10px;
-    border-radius: 5px; /* Половина от размера */
+    border-radius: 5px;
+    /* Половина от размера */
 }
 
 #ColorPickerButton:hover {
@@ -223,7 +224,8 @@ QToolButton[isIconButton="true"]:hover {
 
 /* Рамка розовая при нажатии */
 QToolButton[isIconButton="true"]:checked {
-    border-color: #F92672; /* Рамка тоже розовая */
+    border-color: #F92672;
+    /* Рамка тоже розовая */
 }
 
 /* =================================================================== */
@@ -238,9 +240,16 @@ QMenu {
 
 QMenu::item {
     /* Увеличенные отступы и шрифт для удобства */
-    padding: 8px 25px 8px 20px;
+    /* ИЗМЕНЕНО: Левый padding увеличен с 20px до 32px, чтобы поместилась иконка */
+    padding: 8px 25px 8px 32px;
     color: #F0F0F0;
     font-size: 14px;
+}
+
+/* НОВОЕ: Явное позиционирование иконки */
+QMenu::icon {
+    /* Отступ иконки от левого края */
+    left: 8px;
 }
 
 QMenu::item:selected {

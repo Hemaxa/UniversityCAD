@@ -9,6 +9,10 @@ int main(int argc, char *argv[])
     // Инициализация приложения Qt.
     QApplication a(argc, argv);
 
+    // Определение стилей.
+    a.setAttribute(Qt::AA_DontShowIconsInMenus, false);
+    a.setStyle("Fusion");
+
     // Загрузка и применение таблицы стилей QSS.
     QFile file(":/styles.qss");
     if (file.open(QFile::ReadOnly | QFile::Text)) {

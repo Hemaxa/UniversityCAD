@@ -5,7 +5,7 @@
 Camera::Camera(QObject* parent) : QObject(parent)
 {
     // Начальная позиция камеры
-    m_panOffset = QPointF(50.0, 50.0);
+    m_panOffset = QPointF(25.0, 25.0);
 
     // Настройка анимации вращения
     m_rotationAnimation = new QPropertyAnimation(this, "rotationAngle", this);

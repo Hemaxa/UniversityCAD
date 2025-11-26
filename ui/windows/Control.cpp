@@ -12,8 +12,9 @@
 #include <QButtonGroup>
 #include <QListWidget>
 #include <QLabel>
-#include <QKeySequence> // Добавлено
+#include <QKeySequence>
 
+// Конструктор: создает структуру виджетов панели управления.
 Control::Control(QWidget *parent) : QWidget(parent)
 {
     this->setObjectName("ControlPanel");
@@ -22,14 +23,12 @@ Control::Control(QWidget *parent) : QWidget(parent)
     mainLayout->setAlignment(Qt::AlignTop);
     mainLayout->setSpacing(15);
 
-    // --- 1. Группа "Параметры сцены" ---
+    // --- Группа "Параметры сцены" ---
     auto* sceneGroup = new QGroupBox("Параметры сцены");
-
     auto* sceneLayout = new QGridLayout(sceneGroup);
     sceneLayout->setAlignment(Qt::AlignLeft);
     sceneLayout->setHorizontalSpacing(15);
 
-    // Колонка 1
     m_gridStepSpinBox = new QSpinBox();
     m_gridStepSpinBox->setRange(10, 200);
     m_gridStepSpinBox->setValue(50);
@@ -42,7 +41,6 @@ Control::Control(QWidget *parent) : QWidget(parent)
     sceneLayout->addWidget(new QLabel("Единицы:"), 1, 0);
     sceneLayout->addWidget(m_angleUnitComboBox, 1, 1);
 
-    // Колонка 2
     m_zoomStepSpinBox = new QDoubleSpinBox();
     m_zoomStepSpinBox->setRange(1.05, 2.0);
     m_zoomStepSpinBox->setSingleStep(0.05);
@@ -68,7 +66,7 @@ Control::Control(QWidget *parent) : QWidget(parent)
     sceneLayout->addWidget(new QLabel("Коорд.:"), 1, 2);
     sceneLayout->addLayout(coordLayout, 1, 3);
 
-    // --- 2. Группа "Объекты сцены" ---
+    // --- Группа "Объекты сцены" ---
     auto* objectsGroup = new QGroupBox("Объекты сцены");
     auto* objectsLayout = new QVBoxLayout(objectsGroup);
     m_objectListWidget = new QListWidget();
@@ -77,7 +75,7 @@ Control::Control(QWidget *parent) : QWidget(parent)
     objectsLayout->addWidget(m_objectListWidget);
     objectsLayout->addWidget(m_deleteBtn);
 
-    // --- 3. Группа "Создание примитивов" ---
+    // --- Группа "Создание примитивов" ---
     auto* primitivesGroup = new QGroupBox("Создание объектов");
     auto* primitivesLayout = new QHBoxLayout(primitivesGroup);
     primitivesLayout->setAlignment(Qt::AlignLeft);
@@ -90,8 +88,6 @@ Control::Control(QWidget *parent) : QWidget(parent)
     m_createSegmentBtn->setIcon(QIcon(":/icons/segment.svg"));
     m_createSegmentBtn->setIconSize(QSize(20, 20));
     m_createSegmentBtn->setProperty("isIconButton", true);
-
-    // ГОРЯЧАЯ КЛАВИША S
     m_createSegmentBtn->setShortcut(Qt::Key_S);
     m_createSegmentBtn->setToolTip("Отрезок (S)");
 
@@ -102,7 +98,7 @@ Control::Control(QWidget *parent) : QWidget(parent)
     mainLayout->addWidget(objectsGroup);
     mainLayout->addWidget(primitivesGroup);
 
-    // --- Соединения ---
+    // Подключение сигналов
     connect(m_gridStepSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, &Control::gridStepChanged);
     connect(m_zoomStepSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &Control::zoomStepChanged);
     connect(m_angleUnitComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index){
@@ -118,6 +114,7 @@ Control::Control(QWidget *parent) : QWidget(parent)
     });
 }
 
+// Заполняет QListWidget именами объектов из сцены.
 void Control::updateObjectList(const Scene* scene)
 {
     m_objectListWidget->blockSignals(true);
@@ -159,6 +156,7 @@ void Control::updateObjectList(const Scene* scene)
     m_objectListWidget->blockSignals(false);
 }
 
+// Определяет, какой объект был выбран в списке, и испускает сигнал.
 void Control::onSelectionChanged()
 {
     auto selectedItems = m_objectListWidget->selectedItems();
@@ -170,10 +168,13 @@ void Control::onSelectionChanged()
     }
 }
 
+// Испускает сигнал переключения в Декартову систему координат.
 void Control::onCartesianClicked() { emit coordinateSystemChanged(CoordinateSystemType::Cartesian); }
 
+// Испускает сигнал переключения в Полярную систему координат.
 void Control::onPolarClicked() { emit coordinateSystemChanged(CoordinateSystemType::Polar); }
 
+// Управляет логикой переключения инструментов (гарантирует одно активное состояние).
 void Control::onPrimitiveToolToggled(bool checked, PrimitiveType type)
 {
     if (checked) {

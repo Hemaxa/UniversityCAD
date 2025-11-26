@@ -3,89 +3,149 @@
 #include <QWidget>
 #include <map>
 #include <memory>
-
 #include "Enums.h"
 
-// Прямые объявления.
 class Scene;
 class Draw;
 class QPainter;
 class QLabel;
 class Object;
-class Camera; // Новый класс камеры
-class ContextMenu; // Новый класс меню
+class Camera;
+class ContextMenu;
 
-// Виджет для отрисовки 2D-сцены, сетки и навигации.
+// Виджет, отвечающий за отрисовку 2D-сцены, сетки, навигацию и обработку мыши.
 class Viewport : public QWidget
 {
     Q_OBJECT
 
 public:
+    // Конструктор: настраивает камеру, меню и инфо-панель.
     explicit Viewport(QWidget *parent = nullptr);
-    ~Viewport(); // Деструктор нужен для удаления камеры
 
+    // Деструктор.
+    ~Viewport();
+
+    // Устанавливает указатель на сцену для отрисовки.
     void setScene(Scene* scene);
+
+    // Устанавливает набор стратегий для отрисовки разных типов объектов.
     void setDrawingStrategies(const std::map<PrimitiveType, std::unique_ptr<Draw>>* strategies);
+
+    // Задает шаг сетки (в мировых единицах).
     void setGridStep(int step);
+
+    // Задает шаг зумирования (множитель масштаба).
     void setZoomStep(double step);
 
-    // Методы преобразования координат теперь используют камеру
+    // Преобразует координаты из мировых (сцена) в экранные (пиксели).
     QPointF worldToScreen(const QPointF& worldPos) const;
+
+    // Преобразует координаты из экранных (пиксели) в мировые (сцена).
     QPointF screenToWorld(const QPointF& screenPos) const;
 
-    // Геттер точки привязки (для инструментов)
+    // Возвращает точку в мировых координатах, привязанную к узлу сетки.
     QPointF getSnappedPoint(const QPointF& mousePos) const;
 
 public slots:
-    void update(); // Переопределенный update
+    // Принудительно перерисовывает виджет.
+    void update();
+
+    // Меняет отображаемую систему координат в инфо-панели.
     void setCoordinateSystem(CoordinateSystemType type);
+
+    // Устанавливает текущий выделенный объект (для подсветки).
     void setSelectedObject(Object* obj);
 
-    // Новые слоты для навигации (вызываются из меню или горячих клавиш)
+    // Приближает камеру.
     void zoomIn();
+
+    // Отдаляет камеру.
     void zoomOut();
+
+    // Масштабирует вид так, чтобы все объекты поместились на экране.
     void zoomToExtents();
+
+    // Поворачивает камеру влево.
     void rotateLeft();
+
+    // Поворачивает камеру вправо.
     void rotateRight();
 
 protected:
+    // Событие отрисовки: рисует фон, сетку, объекты и интерфейсные элементы.
     void paintEvent(QPaintEvent *event) override;
 
-    // События мыши и колеса
+    // Событие нажатия кнопки мыши: начало панорамирования или клик по гизмо.
     void mousePressEvent(QMouseEvent *event) override;
+
+    // Событие перемещения мыши: панорамирование и обновление координат.
     void mouseMoveEvent(QMouseEvent *event) override;
+
+    // Событие отпускания кнопки мыши: завершение панорамирования.
     void mouseReleaseEvent(QMouseEvent *event) override;
+
+    // Событие прокрутки колеса мыши: зумирование.
     void wheelEvent(QWheelEvent *event) override;
-    void resizeEvent(QResizeEvent *event) override; // Нужно для обновления размера камеры
+
+    // Событие изменения размера окна: обновление параметров камеры.
+    void resizeEvent(QResizeEvent *event) override;
 
 private slots:
-    // Слот, вызываемый камерой при изменении её состояния
+    // Вызывается камерой при изменении её параметров (для перерисовки).
     void onCameraUpdated();
-    // Слот вызова контекстного меню
+
+    // Показывает контекстное меню в позиции курсора.
     void showContextMenu(const QPoint& pos);
 
 private:
-    void drawGrid(QPainter& painter, const QTransform& transform); // Обновленная сетка
-    void drawGizmo(QPainter& painter); // Обновленный гизмо
-    void updateInfoLabel();
-    double calculateDynamicGridStep() const;
-    QRect getGizmoRect() const; // Область клика по гизмо
+    // Рисует сетку координат.
+    void drawGrid(QPainter& painter, const QTransform& transform);
 
+    // Рисует навигационный куб/оси (Гизмо).
+    void drawGizmo(QPainter& painter);
+
+    // Обновляет текст в информационной панели (координаты, зум).
+    void updateInfoLabel();
+
+    // Вычисляет шаг сетки, адаптированный под текущий зум.
+    double calculateDynamicGridStep() const;
+
+    // Возвращает область экрана, занимаемую гизмо (для кликов).
+    QRect getGizmoRect() const;
+
+    // Указатель на сцену с данными.
     Scene* m_scene = nullptr;
+
+    // Указатель на карту стратегий отрисовки.
     const std::map<PrimitiveType, std::unique_ptr<Draw>>* m_drawingStrategies = nullptr;
+
+    // Указатель на выделенный объект.
     Object* m_selectedObject = nullptr;
 
-    // --- Новые компоненты ---
-    Camera* m_camera; // Экземпляр камеры
-    ContextMenu* m_contextMenu; // Экземпляр меню
+    // Объект камеры, управляющий трансформациями.
+    Camera* m_camera;
 
-    // Параметры навигации (старые удалены, осталась логика взаимодействия)
+    // Контекстное меню вида.
+    ContextMenu* m_contextMenu;
+
+    // Текущий шаг сетки.
     int m_gridStep = 50;
+
+    // Текущий коэффициент изменения зума.
     double m_zoomStep = 1.25;
+
+    // Последняя позиция мыши при панорамировании.
     QPoint m_lastPanPos;
+
+    // Флаг, указывающий, происходит ли сейчас панорамирование.
     bool m_isPanning = false;
 
+    // Виджет для отображения информации о состоянии.
     QLabel* m_infoLabel;
+
+    // Текущие координаты мыши в мире.
     QPointF m_currentMouseWorldPos{0.0, 0.0};
+
+    // Тип системы координат для отображения в инфо-панели.
     CoordinateSystemType m_coordSystemType = CoordinateSystemType::Cartesian;
 };
