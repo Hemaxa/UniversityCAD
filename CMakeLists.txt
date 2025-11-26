@@ -18,6 +18,8 @@ target_sources (UniversityCAD PRIVATE
 
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/CadWindow.h
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/CadWindow.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/ContextMenu.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/ContextMenu.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/Control.h
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/Control.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/Properties.h
@@ -29,6 +31,8 @@ target_sources (UniversityCAD PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/draw/SegmentDraw.h
     ${CMAKE_CURRENT_SOURCE_DIR}/draw/SegmentDraw.cpp
 
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/Camera.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/Camera.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/core/Enums.h
     ${CMAKE_CURRENT_SOURCE_DIR}/core/Scene.h
     ${CMAKE_CURRENT_SOURCE_DIR}/core/Scene.cpp
