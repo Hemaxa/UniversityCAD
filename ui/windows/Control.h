@@ -26,6 +26,9 @@ public slots:
     // Обновляет виджет списка объектов на основе данных сцены.
     void updateObjectList(const Scene* scene);
 
+    // Обработчик снятия выделения с объекта.
+    void clearSelection();
+
 signals:
     // Сигнал об изменении шага сетки.
     void gridStepChanged(int step);

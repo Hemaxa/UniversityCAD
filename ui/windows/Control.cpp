@@ -168,6 +168,12 @@ void Control::onSelectionChanged()
     }
 }
 
+// Очищает выбранный объект.
+void Control::clearSelection()
+{
+    m_objectListWidget->clearSelection();
+}
+
 // Испускает сигнал переключения в Декартову систему координат.
 void Control::onCartesianClicked() { emit coordinateSystemChanged(CoordinateSystemType::Cartesian); }
 

@@ -11,6 +11,8 @@
 #include <QSplitter>
 #include <QScreen>
 #include <QGuiApplication>
+#include <QShortcut>
+#include <QKeySequence>
 
 // Конструктор: создает сцену, настраивает стратегии отрисовки и UI.
 CadWindow::CadWindow(QWidget *parent)
@@ -72,6 +74,9 @@ void CadWindow::createConnections()
     connect(m_controlPanel, &Control::deleteRequested, this, &CadWindow::onDeleteRequested);
     connect(m_controlPanel, &Control::objectSelected, this, &CadWindow::onObjectSelected);
     connect(m_propertiesPanel, &Properties::objectModified, this, &CadWindow::onObjectModified);
+
+    auto* escapeShortcut = new QShortcut(QKeySequence(Qt::Key_Escape), this);
+    connect(escapeShortcut, &QShortcut::activated, m_controlPanel, &Control::clearSelection);
 
     connect(this, &CadWindow::sceneChanged, m_controlPanel, &Control::updateObjectList);
 }
