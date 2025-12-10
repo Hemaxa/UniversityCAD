@@ -2,30 +2,36 @@
 
 // Типы геометрических примитивов.
 enum class PrimitiveType {
-    Generic, // Общий тип (курсор)
-    Point,   // Точка
-    Segment  // Отрезок
+    Generic,
+    Point,
+    Segment,
+    Circle,
+    Arc,
+    Rectangle,
+    Ellipse,
+    Polygon,
+    Spline
 };
 
 // Типы систем координат.
 enum class CoordinateSystemType {
-    Cartesian, // Декартова
-    Polar      // Полярная
+    Cartesian,
+    Polar
 };
 
 // Единицы измерения углов.
 enum class AngleUnit {
-    Degrees, // Градусы
-    Radians  // Радианы
+    Degrees,
+    Radians
 };
 
 // Типы линий.
 enum class LineStyleType {
-    Solid,          // Сплошная
-    SolidWavy,      // Сплошная волнистая
-    SolidZigZag,    // Сплошная с изломами
-    Dashed,         // Штриховая
-    DashDot,        // Штрихпунктирная
-    DashDotDot,     // Штрихпунктирная с двумя точками
-    Custom          // Пользовательская
+    Solid,
+    SolidWavy,
+    SolidZigZag,
+    Dashed,
+    DashDot,
+    DashDotDot,
+    Custom
 };

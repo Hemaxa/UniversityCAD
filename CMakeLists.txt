@@ -10,7 +10,14 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
-add_executable(UniversityCAD)
+add_executable(UniversityCAD
+    core/objects/Circle.h core/objects/Circle.cpp
+    core/objects/Arc.h core/objects/Arc.cpp
+    core/objects/Rectangle.h core/objects/Rectangle.cpp
+    core/objects/Ellipse.h core/objects/Ellipse.cpp
+    core/objects/Polygon.h core/objects/Polygon.cpp
+    core/objects/Spline.h core/objects/Spline.cpp
+    draw/PrimitiveStrategies.h draw/PrimitiveStrategies.cpp)
 
 target_sources (UniversityCAD PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Main.cpp
