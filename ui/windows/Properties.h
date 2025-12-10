@@ -1,102 +1,94 @@
 #pragma once
 
 #include <QWidget>
-
+#include <vector>
 #include "Enums.h"
+#include "Object.h"
 
-// Прямые объявления.
 class QStackedWidget;
 class QPushButton;
 class QLabel;
 class Point;
 class QColor;
 class QDoubleSpinBox;
-class Object;
+class QComboBox;
 class Segment;
+class QToolButton;
 
-// Панель для ввода параметров создаваемого объекта.
+// Панель для ввода параметров и стилей объектов.
 class Properties : public QWidget
 {
     Q_OBJECT
 
 public:
-    // Конструктор панели свойств.
     explicit Properties(QWidget *parent = nullptr);
 
 public slots:
-    // Устанавливает текущую систему координат (декартову или полярную).
     void setCoordinateSystem(CoordinateSystemType type);
-
-    // Обновляет суффиксы для полей ввода углов (° или rad).
     void updateAngleLabels();
 
-    // Показывает панель создания.
     void showCreationPropertiesFor(PrimitiveType type);
-
-    // Показывает панель редактирования для выбранного объекта.
-    void showEditingPropertiesFor(Object* obj);
+    void showEditingPropertiesFor(const std::vector<Object*>& objects);
 
 signals:
-    // Сигнал, запрашивающий создание отрезка с заданными параметрами.
-    void segmentCreateRequested(const Point& start, const Point& end, const QColor& color);
-
-    // Сигнал, что данные объекта были изменены.
-    void objectModified(Object* obj);
+    void segmentCreateRequested(const Point& start, const Point& end, const QColor& color, const LineStyle& style);
+    void objectsModified(const std::vector<Object*>& objs);
 
 private slots:
-    // Слот обрабатывает и "Создать", и "Применить".
-    void onApplyClicked();
-
-    // Слот, вызываемый при нажатии на кнопку выбора цвета.
+    void onApplyClicked(); // Обрабатывает и создание, и обновление
     void onColorButtonClicked();
-
-    // Слот для обновления вычисляемых метрик (длина, угол).
     void updateSegmentMetrics();
+    void showStyleMenu();
+    void onAddCustomStyle();
 
 private:
-    // Создает виджет-заглушку (когда не выбран инструмент).
     QWidget* createPlaceholderWidget();
-
-    // Создает виджеты для ввода параметров отрезка.
     QWidget* createSegmentWidgets();
+    QWidget* createStyleWidget();
 
-    // Обновляет цвет фона кнопки выбора цвета.
     void updateColorButton(const QColor& color);
-
-    // Заполняет поля данными из выбранного отрезка.
-    void populateFields(Segment* segment);
-
-    // Считывает данные из полей и обновляет выбранный объект.
-    void updateSelectedObject();
-
-    // Считывает точки из полей (используется и для создания, и для обновления).
+    void populateFields(const std::vector<Object*>& objects);
+    void populateStyleFields(const std::vector<Object*>& objects);
     void getPointsFromFields(Point& start, Point& end);
 
-    // Элементы UI.
+    // Возвращает путь к иконке ресурса для типа
+    QString getIconPath(LineStyleType type);
+
     QStackedWidget* m_stack;
     QWidget* m_placeholderWidget;
     QWidget* m_segmentWidget;
+
     CoordinateSystemType m_coordSystem;
     QColor m_selectedColor;
 
-    // Указатель на объект, который сейчас редактируется.
-    // Если nullptr, панель находится в режиме "Создание".
-    Object* m_currentObject = nullptr;
+    // Текущий выбранный стиль (используется для новых объектов)
+    LineStyle m_currentStyle;
 
-    // Элементы для отрезка
+    // Список доступных пресетов (стандартные + пользовательские)
+    std::vector<LineStyle> m_availableStyles;
+
+    std::vector<Object*> m_currentObjects;
+    bool m_isCreationMode = true;
+
     QStackedWidget* m_segmentParamsStack;
     QWidget* m_cartesianSegmentWidgets;
     QWidget* m_polarSegmentWidgets;
 
-    // Спинбоксы для декартова режима
+    // Спинбоксы геометрии
     QDoubleSpinBox *m_startXSpin, *m_startYSpin, *m_endXSpin, *m_endYSpin;
-
-    // Спинбоксы для полярного режима.
     QDoubleSpinBox *m_polarStartXSpin, *m_polarStartYSpin;
     QDoubleSpinBox *m_endRadiusSpin, *m_endAngleSpin;
+    QLabel *m_endAngleLabel, *m_segmentLengthLabel, *m_segmentAngleLabel;
 
-    QLabel *m_startAngleLabel, *m_endAngleLabel;
-    QLabel *m_segmentLengthLabel, *m_segmentAngleLabel;
+    // Виджеты стиля
+    QWidget* m_styleContainer;
+    QPushButton* m_stylePresetButton;
+    QDoubleSpinBox* m_lineWidthSpin;
+    QDoubleSpinBox* m_dashLengthSpin;
+    QDoubleSpinBox* m_gapLengthSpin;
     QPushButton* m_colorButton;
-    QPushButton* m_applyButton;
+
+    QPushButton* m_applyButton; // Кнопка "Создать" / "Обновить"
+
+    bool m_mixedColor = false;
 };

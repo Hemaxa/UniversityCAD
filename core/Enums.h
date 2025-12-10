@@ -2,7 +2,7 @@
 
 // Типы геометрических примитивов.
 enum class PrimitiveType {
-    Generic, // Общий тип
+    Generic, // Общий тип (курсор)
     Point,   // Точка
     Segment  // Отрезок
 };
@@ -17,4 +17,15 @@ enum class CoordinateSystemType {
 enum class AngleUnit {
     Degrees, // Градусы
     Radians  // Радианы
+};
+
+// Типы линий.
+enum class LineStyleType {
+    Solid,          // Сплошная
+    SolidWavy,      // Сплошная волнистая
+    SolidZigZag,    // Сплошная с изломами
+    Dashed,         // Штриховая
+    DashDot,        // Штрихпунктирная
+    DashDotDot,     // Штрихпунктирная с двумя точками
+    Custom          // Пользовательская
 };

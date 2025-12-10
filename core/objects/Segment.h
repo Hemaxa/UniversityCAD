@@ -3,33 +3,29 @@
 #include "Object.h"
 #include "Point.h"
 
-// Класс для представления отрезка, определенного двумя точками.
+// Класс для представления отрезка.
 class Segment : public Object
 {
 public:
-    // Конструктор, создающий отрезок по начальной и конечной точкам.
+    // Конструктор по двум точкам.
     Segment(const Point& start, const Point& end);
 
-    // Возвращает тип примитива (отрезок).
+    // Возвращает тип примитива (Segment).
     PrimitiveType getType() const override { return PrimitiveType::Segment; };
 
-    // Возвращает константную ссылку на начальную точку отрезка.
+    // Возвращает начальную точку.
     const Point& getStart() const;
 
-    // Устанавливает начальную точку отрезка.
+    // Устанавливает начальную точку.
     void setStart(const Point& point);
 
-    // Возвращает константную ссылку на конечную точку отрезка.
+    // Возвращает конечную точку.
     const Point& getEnd() const;
 
-    // Устанавливает конечную точку отрезка.
+    // Устанавливает конечную точку.
     void setEnd(const Point& point);
 
 private:
-    // Начальная точка отрезка.
-    Point m_start;
-
-    // Конечная точка отрезка.
-    Point m_end;
+    Point m_start; // Начало отрезка
+    Point m_end;   // Конец отрезка
 };
-

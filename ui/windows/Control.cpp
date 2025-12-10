@@ -1,5 +1,6 @@
 #include "Control.h"
 #include "Scene.h"
+#include "Object.h"
 
 #include <QVBoxLayout>
 #include <QGridLayout>
@@ -14,7 +15,6 @@
 #include <QLabel>
 #include <QKeySequence>
 
-// Конструктор: создает структуру виджетов панели управления.
 Control::Control(QWidget *parent) : QWidget(parent)
 {
     this->setObjectName("ControlPanel");
@@ -23,7 +23,6 @@ Control::Control(QWidget *parent) : QWidget(parent)
     mainLayout->setAlignment(Qt::AlignTop);
     mainLayout->setSpacing(15);
 
-    // --- Группа "Параметры сцены" ---
     auto* sceneGroup = new QGroupBox("Параметры сцены");
     auto* sceneLayout = new QGridLayout(sceneGroup);
     sceneLayout->setAlignment(Qt::AlignLeft);
@@ -66,16 +65,17 @@ Control::Control(QWidget *parent) : QWidget(parent)
     sceneLayout->addWidget(new QLabel("Коорд.:"), 1, 2);
     sceneLayout->addLayout(coordLayout, 1, 3);
 
-    // --- Группа "Объекты сцены" ---
     auto* objectsGroup = new QGroupBox("Объекты сцены");
     auto* objectsLayout = new QVBoxLayout(objectsGroup);
     m_objectListWidget = new QListWidget();
+    // Включаем расширенное выделение (Ctrl/Shift)
+    m_objectListWidget->setSelectionMode(QAbstractItemView::ExtendedSelection);
+
     m_deleteBtn = new QPushButton("Удалить выбранный");
     m_deleteBtn->setObjectName("deleteButton");
     objectsLayout->addWidget(m_objectListWidget);
     objectsLayout->addWidget(m_deleteBtn);
 
-    // --- Группа "Создание примитивов" ---
     auto* primitivesGroup = new QGroupBox("Создание объектов");
     auto* primitivesLayout = new QHBoxLayout(primitivesGroup);
     primitivesLayout->setAlignment(Qt::AlignLeft);
@@ -98,7 +98,6 @@ Control::Control(QWidget *parent) : QWidget(parent)
     mainLayout->addWidget(objectsGroup);
     mainLayout->addWidget(primitivesGroup);
 
-    // Подключение сигналов
     connect(m_gridStepSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, &Control::gridStepChanged);
     connect(m_zoomStepSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &Control::zoomStepChanged);
     connect(m_angleUnitComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index){
@@ -106,7 +105,9 @@ Control::Control(QWidget *parent) : QWidget(parent)
     });
     connect(m_cartesianBtn, &QToolButton::clicked, this, &Control::onCartesianClicked);
     connect(m_polarBtn, &QToolButton::clicked, this, &Control::onPolarClicked);
+
     connect(m_objectListWidget, &QListWidget::itemSelectionChanged, this, &Control::onSelectionChanged);
+
     connect(m_deleteBtn, &QPushButton::clicked, this, &Control::deleteRequested);
 
     connect(m_createSegmentBtn, &QToolButton::toggled, this, [this](bool checked){
@@ -114,23 +115,23 @@ Control::Control(QWidget *parent) : QWidget(parent)
     });
 }
 
-// Заполняет QListWidget именами объектов из сцены.
 void Control::updateObjectList(const Scene* scene)
 {
+    m_updatingSelection = true; // Блокируем сигналы во время обновления
     m_objectListWidget->blockSignals(true);
 
-    Object* currentSelectedObject = nullptr;
-    if (m_objectListWidget->currentItem()) {
-        currentSelectedObject = static_cast<Object*>(m_objectListWidget->currentItem()->data(Qt::UserRole).value<void*>());
+    // Сохраняем текущее выделение (pointer set)
+    std::vector<Object*> currentSelection;
+    for (auto* item : m_objectListWidget->selectedItems()) {
+        currentSelection.push_back(static_cast<Object*>(item->data(Qt::UserRole).value<void*>()));
     }
 
     m_objectListWidget->clear();
     if (!scene) {
         m_objectListWidget->blockSignals(false);
+        m_updatingSelection = false;
         return;
     }
-
-    QListWidgetItem* itemToSelect = nullptr;
 
     for (const auto& obj : scene->getPrimitives()) {
         QString itemName;
@@ -144,48 +145,83 @@ void Control::updateObjectList(const Scene* scene)
         QListWidgetItem* item = new QListWidgetItem(itemName, m_objectListWidget);
         item->setData(Qt::UserRole, QVariant::fromValue(static_cast<void*>(obj.get())));
 
-        if (obj.get() == currentSelectedObject) {
-            itemToSelect = item;
+        // Восстанавливаем выделение
+        for (auto* selObj : currentSelection) {
+            if (selObj == obj.get()) {
+                item->setSelected(true);
+                break;
+            }
         }
     }
 
-    if (itemToSelect) {
-        itemToSelect->setSelected(true);
+    m_objectListWidget->blockSignals(false);
+    m_updatingSelection = false;
+}
+
+void Control::onSelectionChanged()
+{
+    if (m_updatingSelection) return;
+
+    std::vector<Object*> selectedObjects;
+    auto selectedItems = m_objectListWidget->selectedItems();
+
+    for (auto* item : selectedItems) {
+        Object* obj = static_cast<Object*>(item->data(Qt::UserRole).value<void*>());
+        selectedObjects.push_back(obj);
+    }
+
+    emit objectsSelected(selectedObjects);
+}
+
+void Control::setSelectedObjects(const std::vector<Object*>& objects)
+{
+    if (m_updatingSelection) return;
+    m_updatingSelection = true;
+    m_objectListWidget->blockSignals(true);
+
+    m_objectListWidget->clearSelection();
+
+    for (int i = 0; i < m_objectListWidget->count(); ++i) {
+        QListWidgetItem* item = m_objectListWidget->item(i);
+        Object* itemObj = static_cast<Object*>(item->data(Qt::UserRole).value<void*>());
+
+        for (auto* obj : objects) {
+            if (itemObj == obj) {
+                item->setSelected(true);
+                break;
+            }
+        }
     }
 
     m_objectListWidget->blockSignals(false);
+    m_updatingSelection = false;
 }
 
-// Определяет, какой объект был выбран в списке, и испускает сигнал.
-void Control::onSelectionChanged()
-{
-    auto selectedItems = m_objectListWidget->selectedItems();
-    if (!selectedItems.isEmpty()) {
-        Object* selectedObject = static_cast<Object*>(selectedItems.first()->data(Qt::UserRole).value<void*>());
-        emit objectSelected(selectedObject);
-    } else {
-        emit objectSelected(nullptr);
-    }
-}
-
-// Очищает выбранный объект.
 void Control::clearSelection()
 {
     m_objectListWidget->clearSelection();
 }
 
-// Испускает сигнал переключения в Декартову систему координат.
-void Control::onCartesianClicked() { emit coordinateSystemChanged(CoordinateSystemType::Cartesian); }
+void Control::resetTools()
+{
+    // Снимаем выделение с группы кнопок (Reset to generic)
+    if (QAbstractButton* checked = m_primitiveToolsGroup->checkedButton()) {
+        m_primitiveToolsGroup->setExclusive(false);
+        checked->setChecked(false);
+        m_primitiveToolsGroup->setExclusive(true);
+        emit primitiveTypeSelected(PrimitiveType::Generic);
+    }
+}
 
-// Испускает сигнал переключения в Полярную систему координат.
+void Control::onCartesianClicked() { emit coordinateSystemChanged(CoordinateSystemType::Cartesian); }
 void Control::onPolarClicked() { emit coordinateSystemChanged(CoordinateSystemType::Polar); }
 
-// Управляет логикой переключения инструментов (гарантирует одно активное состояние).
 void Control::onPrimitiveToolToggled(bool checked, PrimitiveType type)
 {
     if (checked) {
         emit primitiveTypeSelected(type);
     } else {
+        // Если кнопка отжалась и ни одна другая не нажата (группа exclusive handle this mostly, but for manual uncheck)
         if (!m_primitiveToolsGroup->checkedButton()) {
             emit primitiveTypeSelected(PrimitiveType::Generic);
         }

@@ -14,7 +14,6 @@
 #include <QShortcut>
 #include <QKeySequence>
 
-// Конструктор: создает сцену, настраивает стратегии отрисовки и UI.
 CadWindow::CadWindow(QWidget *parent)
     : QMainWindow(parent),
     m_activePrimitiveType(PrimitiveType::Generic)
@@ -30,13 +29,11 @@ CadWindow::CadWindow(QWidget *parent)
     emit sceneChanged(m_scene);
 }
 
-// Деструктор: удаляет сцену.
 CadWindow::~CadWindow()
 {
     delete m_scene;
 }
 
-// Настраивает внешний вид: создает панели, сплиттеры и задает начальные размеры.
 void CadWindow::setupUi()
 {
     m_viewportPanel = new Viewport(this);
@@ -59,7 +56,6 @@ void CadWindow::setupUi()
     setWindowTitle("UniversityCAD");
 }
 
-// Связывает сигналы от панелей управления с методами окна и вьюпорта.
 void CadWindow::createConnections()
 {
     connect(m_controlPanel, &Control::gridStepChanged, this, &CadWindow::onGridStepChanged);
@@ -69,90 +65,116 @@ void CadWindow::createConnections()
     connect(m_controlPanel, &Control::coordinateSystemChanged, m_viewportPanel, &Viewport::setCoordinateSystem);
 
     connect(m_controlPanel, &Control::primitiveTypeSelected, this, &CadWindow::onPrimitiveTypeSelected);
+
     connect(m_propertiesPanel, &Properties::segmentCreateRequested, this, &CadWindow::createSegment);
-
     connect(m_controlPanel, &Control::deleteRequested, this, &CadWindow::onDeleteRequested);
-    connect(m_controlPanel, &Control::objectSelected, this, &CadWindow::onObjectSelected);
-    connect(m_propertiesPanel, &Properties::objectModified, this, &CadWindow::onObjectModified);
 
+    // Выбор во Viewport -> Обновляем окно и список
+    connect(m_viewportPanel, &Viewport::selectionChanged, this, &CadWindow::onObjectsSelected);
+
+    // ИСПРАВЛЕНИЕ 1: Выбор в Списке -> Обновляем окно и вьюпорт
+    connect(m_controlPanel, &Control::objectsSelected, this, &CadWindow::onObjectsSelectedFromList);
+
+    connect(m_propertiesPanel, &Properties::objectsModified, this, &CadWindow::onObjectsModified);
+
+    // ИСПРАВЛЕНИЕ 3: Глобальный Escape
     auto* escapeShortcut = new QShortcut(QKeySequence(Qt::Key_Escape), this);
-    connect(escapeShortcut, &QShortcut::activated, m_controlPanel, &Control::clearSelection);
+    connect(escapeShortcut, &QShortcut::activated, this, &CadWindow::onEscapePressed);
 
     connect(this, &CadWindow::sceneChanged, m_controlPanel, &Control::updateObjectList);
 }
 
-// Регистрирует классы отрисовки для поддерживаемых примитивов.
 void CadWindow::setupDrawingStrategies()
 {
     m_drawingStrategies[PrimitiveType::Segment] = std::make_unique<SegmentDraw>();
 }
 
-// Передает новый шаг сетки во вьюпорт.
-void CadWindow::onGridStepChanged(int step)
-{
-    m_viewportPanel->setGridStep(step);
-}
+void CadWindow::onGridStepChanged(int step) { m_viewportPanel->setGridStep(step); }
+void CadWindow::onAngleUnitChanged(AngleUnit unit) { Point::setAngleUnit(unit); m_propertiesPanel->updateAngleLabels(); }
 
-// Обновляет глобальную настройку единиц измерения углов.
-void CadWindow::onAngleUnitChanged(AngleUnit unit)
-{
-    Point::setAngleUnit(unit);
-    m_propertiesPanel->updateAngleLabels();
-}
-
-// Активирует режим создания выбранного примитива.
 void CadWindow::onPrimitiveTypeSelected(PrimitiveType type)
 {
     m_activePrimitiveType = type;
-
-    if (m_selectedObject == nullptr) {
+    if (m_selectedObjects.empty()) {
         m_propertiesPanel->showCreationPropertiesFor(type);
     }
 }
 
-// Создает отрезок, добавляет его в сцену и обновляет вид.
-void CadWindow::createSegment(const Point& start, const Point& end, const QColor& color)
+void CadWindow::createSegment(const Point& start, const Point& end, const QColor& color, const LineStyle& style)
 {
     auto newSegment = std::make_unique<Segment>(start, end);
     newSegment->setColor(color);
+    newSegment->setLineStyle(style);
     m_scene->addPrimitive(std::move(newSegment));
-
     m_viewportPanel->update();
     emit sceneChanged(m_scene);
 }
 
-// Удаляет выбранный объект из сцены и сбрасывает выделение.
 void CadWindow::onDeleteRequested()
 {
-    if (m_selectedObject) {
-        m_scene->removePrimitive(m_selectedObject);
-        m_selectedObject = nullptr;
+    // Теперь m_selectedObjects всегда актуален благодаря синхронизации
+    if (!m_selectedObjects.empty()) {
+        for (auto* obj : m_selectedObjects) {
+            m_scene->removePrimitive(obj);
+        }
 
-        m_viewportPanel->setSelectedObject(nullptr);
-        m_propertiesPanel->showCreationPropertiesFor(m_activePrimitiveType);
+        onEscapePressed(); // Сброс выделения и возврат к дефолтному состоянию
 
         m_viewportPanel->update();
         emit sceneChanged(m_scene);
     }
 }
 
-// Обрабатывает выбор объекта: обновляет вьюпорт и переключает панель свойств.
-void CadWindow::onObjectSelected(Object* selectedObject)
+// Выбор произошел во Вьюпорте
+void CadWindow::onObjectsSelected(const std::vector<Object*>& selectedObjects)
 {
-    m_selectedObject = selectedObject;
+    m_selectedObjects = selectedObjects;
 
-    m_viewportPanel->setSelectedObject(m_selectedObject);
+    // Синхронизируем список (без зацикливания, внутри есть защита)
+    m_controlPanel->setSelectedObjects(selectedObjects);
 
-    if (m_selectedObject) {
-        m_propertiesPanel->showEditingPropertiesFor(m_selectedObject);
+    if (!m_selectedObjects.empty()) {
+        m_propertiesPanel->showEditingPropertiesFor(m_selectedObjects);
     } else {
         m_propertiesPanel->showCreationPropertiesFor(m_activePrimitiveType);
     }
 }
 
-// Вызывается при изменении свойств объекта для перерисовки.
-void CadWindow::onObjectModified(Object* obj)
+// Выбор произошел в Списке
+void CadWindow::onObjectsSelectedFromList(const std::vector<Object*>& selectedObjects)
 {
+    m_selectedObjects = selectedObjects;
+
+    // Синхронизируем вьюпорт (без зацикливания)
+    m_viewportPanel->setSelectedObjects(selectedObjects);
+
+    if (!m_selectedObjects.empty()) {
+        m_propertiesPanel->showEditingPropertiesFor(m_selectedObjects);
+    } else {
+        m_propertiesPanel->showCreationPropertiesFor(m_activePrimitiveType);
+    }
+}
+
+// Нажат Escape
+void CadWindow::onEscapePressed()
+{
+    // 1. Сбрасываем выделение данных
+    m_selectedObjects.clear();
+
+    // 2. Сбрасываем UI выделения
+    m_viewportPanel->setSelectedObjects({});
+    m_controlPanel->clearSelection();
+
+    // 3. Сбрасываем инструменты (кнопки)
+    m_controlPanel->resetTools(); // Вернет Generic тип
+    m_activePrimitiveType = PrimitiveType::Generic;
+
+    // 4. Показываем панель создания (пустую/дефолтную)
+    m_propertiesPanel->showCreationPropertiesFor(m_activePrimitiveType);
+}
+
+void CadWindow::onObjectsModified(const std::vector<Object*>& objs)
+{
+    Q_UNUSED(objs);
     m_viewportPanel->update();
-    emit sceneChanged(m_scene);
 }

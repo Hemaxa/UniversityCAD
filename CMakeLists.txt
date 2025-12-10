@@ -18,6 +18,10 @@ target_sources (UniversityCAD PRIVATE
 
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/CadWindow.h
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/CadWindow.cpp
+
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/StyleDialog.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs/StyleDialog.cpp
+
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/ContextMenu.h
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/ContextMenu.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/Control.h
@@ -36,6 +40,7 @@ target_sources (UniversityCAD PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/core/Enums.h
     ${CMAKE_CURRENT_SOURCE_DIR}/core/Scene.h
     ${CMAKE_CURRENT_SOURCE_DIR}/core/Scene.cpp
+
     ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Object.h
     ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Point.h
     ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Point.cpp
@@ -51,6 +56,7 @@ target_include_directories(UniversityCAD PRIVATE
 
     ${CMAKE_CURRENT_SOURCE_DIR}/ui
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs
 )
 
 target_link_libraries(UniversityCAD PRIVATE
