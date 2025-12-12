@@ -5,7 +5,6 @@
 class PolygonObj : public Object {
 public:
     PolygonObj(const Point& center, double radius, int sides, bool inscribed = true);
-
     PrimitiveType getType() const override { return PrimitiveType::Polygon; }
 
     const Point& getCenter() const;
@@ -19,6 +18,8 @@ public:
 
     bool isInscribed() const;
     void setInscribed(bool i);
+
+    std::vector<SnapPoint> getSnapPoints() const override;
 
 private:
     Point m_center;

@@ -4,9 +4,7 @@
 
 class Arc : public Object {
 public:
-    // Angles in degrees
     Arc(const Point& center, double radius, double startAngle, double spanAngle);
-
     PrimitiveType getType() const override { return PrimitiveType::Arc; }
 
     const Point& getCenter() const;
@@ -20,6 +18,8 @@ public:
 
     double getSpanAngle() const;
     void setSpanAngle(double a);
+
+    std::vector<SnapPoint> getSnapPoints() const override;
 
 private:
     Point m_center;

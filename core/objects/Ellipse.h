@@ -5,7 +5,6 @@
 class Ellipse : public Object {
 public:
     Ellipse(const Point& center, double radX, double radY);
-
     PrimitiveType getType() const override { return PrimitiveType::Ellipse; }
 
     const Point& getCenter() const;
@@ -16,6 +15,8 @@ public:
 
     double getRadiusY() const;
     void setRadiusY(double r);
+
+    std::vector<SnapPoint> getSnapPoints() const override;
 
 private:
     Point m_center;

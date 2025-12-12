@@ -104,7 +104,7 @@ private:
     std::vector<std::pair<QDoubleSpinBox*, QDoubleSpinBox*>> m_splineSpinBoxes;
 
     QPushButton* m_stylePresetButton;
-    QDoubleSpinBox* m_lineWidthSpin;
+    // Убран m_lineWidthSpin (теперь глобально)
     QPushButton* m_colorButton;
 
     CoordinateSystemType m_coordSystem = CoordinateSystemType::Cartesian;

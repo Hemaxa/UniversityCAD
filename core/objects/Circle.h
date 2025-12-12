@@ -5,7 +5,6 @@
 class Circle : public Object {
 public:
     Circle(const Point& center, double radius);
-
     PrimitiveType getType() const override { return PrimitiveType::Circle; }
 
     const Point& getCenter() const;
@@ -13,6 +12,8 @@ public:
 
     double getRadius() const;
     void setRadius(double r);
+
+    std::vector<SnapPoint> getSnapPoints() const override;
 
 private:
     Point m_center;

@@ -1,8 +1,6 @@
 #include "Snapper.h"
 #include "Scene.h"
 #include "Segment.h"
-#include "Circle.h"
-#include "Rectangle.h"
 #include <cmath>
 #include <limits>
 
@@ -15,70 +13,77 @@ static double dist(const Point& a, const Point& b) {
     return std::sqrt(std::pow(a.getX() - b.getX(), 2) + std::pow(a.getY() - b.getY(), 2));
 }
 
+// Упрощенный расчет пересечения двух отрезков
+std::optional<Point> getSegmentIntersection(const Point& p1, const Point& p2, const Point& p3, const Point& p4) {
+    double det = (p2.getX() - p1.getX()) * (p4.getY() - p3.getY()) - (p4.getX() - p3.getX()) * (p2.getY() - p1.getY());
+    if (std::abs(det) < 1e-9) return std::nullopt; // Параллельны
+
+    double t = ((p3.getX() - p1.getX()) * (p4.getY() - p3.getY()) - (p4.getX() - p3.getX()) * (p3.getY() - p1.getY())) / det;
+    double u = ((p3.getX() - p1.getX()) * (p2.getY() - p1.getY()) - (p2.getX() - p1.getX()) * (p3.getY() - p1.getY())) / det;
+
+    if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+        return Point(p1.getX() + t * (p2.getX() - p1.getX()), p1.getY() + t * (p2.getY() - p1.getY()));
+    }
+    return std::nullopt;
+}
+
 SnapResult Snapper::snap(const Point& mouseWorldPos, double scaleFactor) const {
     SnapResult result;
+    if (!m_scene) return result;
 
-    // 1. Привязка к объектам (если включена)
-    if (m_objSnapEnabled && m_scene) {
-        double minInfoDist = std::numeric_limits<double>::max();
-        double tolerance = SNAP_DISTANCE / scaleFactor;
+    double minInfoDist = SNAP_DISTANCE / scaleFactor;
 
-        auto checkPoint = [&](const Point& p, SnapType type) {
-            double d = dist(mouseWorldPos, p);
-            if (d < tolerance && d < minInfoDist) {
-                minInfoDist = d;
-                result.snapped = true;
-                result.point = p;
-                result.type = type;
-            }
-        };
+    // 1. Привязка к объектам
+    if (m_objSnapEnabled) {
+        const auto& primitives = m_scene->getPrimitives();
 
-        for (const auto& obj : m_scene->getPrimitives()) {
-            switch (obj->getType()) {
-            case PrimitiveType::Segment: {
-                auto* s = static_cast<Segment*>(obj.get());
-                checkPoint(s->getStart(), SnapType::Endpoint);
-                checkPoint(s->getEnd(), SnapType::Endpoint);
-                checkPoint(Point((s->getStart().getX() + s->getEnd().getX()) / 2,
-                                 (s->getStart().getY() + s->getEnd().getY()) / 2),
-                           SnapType::Midpoint);
-                break;
+        // А) Основные точки (делегируем объектам)
+        for (const auto& obj : primitives) {
+            auto snaps = obj->getSnapPoints();
+            for (const auto& sp : snaps) {
+                double d = dist(mouseWorldPos, sp.p);
+                if (d < minInfoDist) {
+                    minInfoDist = d;
+                    result.snapped = true;
+                    result.point = sp.p;
+                    result.type = sp.type;
+                }
             }
-            case PrimitiveType::Circle: {
-                auto* c = static_cast<Circle*>(obj.get());
-                checkPoint(c->getCenter(), SnapType::Center);
-                checkPoint(Point(c->getCenter().getX() + c->getRadius(), c->getCenter().getY()), SnapType::Quadrant);
-                checkPoint(Point(c->getCenter().getX() - c->getRadius(), c->getCenter().getY()), SnapType::Quadrant);
-                checkPoint(Point(c->getCenter().getX(), c->getCenter().getY() + c->getRadius()), SnapType::Quadrant);
-                checkPoint(Point(c->getCenter().getX(), c->getCenter().getY() - c->getRadius()), SnapType::Quadrant);
-                break;
-            }
-            case PrimitiveType::Rectangle: {
-                auto* r = static_cast<Rectangle*>(obj.get());
-                Point tl = r->getTopLeft();
-                Point tr(tl.getX() + r->getWidth(), tl.getY());
-                Point bl(tl.getX(), tl.getY() - r->getHeight());
-                Point br(tl.getX() + r->getWidth(), tl.getY() - r->getHeight());
-                checkPoint(tl, SnapType::Endpoint); checkPoint(tr, SnapType::Endpoint);
-                checkPoint(bl, SnapType::Endpoint); checkPoint(br, SnapType::Endpoint);
-                break;
-            }
-            default: break;
+        }
+
+        // Б) Пересечения (Intersection) - только для отрезков в рамках примера
+        for (size_t i = 0; i < primitives.size(); ++i) {
+            for (size_t j = i + 1; j < primitives.size(); ++j) {
+                if (primitives[i]->getType() == PrimitiveType::Segment && primitives[j]->getType() == PrimitiveType::Segment) {
+                    auto* s1 = static_cast<Segment*>(primitives[i].get());
+                    auto* s2 = static_cast<Segment*>(primitives[j].get());
+                    auto inter = getSegmentIntersection(s1->getStart(), s1->getEnd(), s2->getStart(), s2->getEnd());
+                    if (inter) {
+                        double d = dist(mouseWorldPos, *inter);
+                        if (d < minInfoDist) {
+                            minInfoDist = d;
+                            result.snapped = true;
+                            result.point = *inter;
+                            result.type = SnapType::Intersection;
+                        }
+                    }
+                }
             }
         }
     }
 
-    // 2. Привязка к сетке (если объектная не сработала)
+    // 2. Привязка к сетке (только если объектная не сработала лучше)
     if (!result.snapped && m_gridSnapEnabled && m_gridStep > 0) {
         double gs = static_cast<double>(m_gridStep);
         double x = std::round(mouseWorldPos.getX() / gs) * gs;
         double y = std::round(mouseWorldPos.getY() / gs) * gs;
 
-        // Проверяем дистанцию (опционально, можно магнитить всегда)
-        // Для удобства магнитим всегда, если курсор "близко" к узлу, или просто всегда округляем координату
-        result.point = Point(x, y);
-        result.snapped = true;
-        result.type = SnapType::None; // Тип None, но snapped = true - значит координаты модифицированы
+        // Магнитим к сетке, если близко (или всегда, если так удобнее)
+        if (dist(mouseWorldPos, Point(x, y)) < minInfoDist) {
+            result.point = Point(x, y);
+            result.snapped = true;
+            result.type = SnapType::None;
+        }
     }
 
     return result;

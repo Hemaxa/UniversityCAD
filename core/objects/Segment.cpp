@@ -1,28 +1,18 @@
 #include "Segment.h"
 
-// Конструктор инициализирует начальную и конечную точки.
 Segment::Segment(const Point& start, const Point& end) : m_start(start), m_end(end) {}
 
-// Возвращает ссылку на начальную точку.
-const Point& Segment::getStart() const
-{
-    return m_start;
-}
+const Point& Segment::getStart() const { return m_start; }
+void Segment::setStart(const Point& point) { m_start = point; }
 
-// Задает новую начальную точку.
-void Segment::setStart(const Point& point)
-{
-    m_start = point;
-}
+const Point& Segment::getEnd() const { return m_end; }
+void Segment::setEnd(const Point& point) { m_end = point; }
 
-// Возвращает ссылку на конечную точку.
-const Point& Segment::getEnd() const
-{
-    return m_end;
-}
-
-// Задает новую конечную точку.
-void Segment::setEnd(const Point& point)
-{
-    m_end = point;
+std::vector<SnapPoint> Segment::getSnapPoints() const {
+    std::vector<SnapPoint> snaps;
+    snaps.push_back({m_start, SnapType::Endpoint});
+    snaps.push_back({m_end, SnapType::Endpoint});
+    snaps.push_back({Point((m_start.getX() + m_end.getX()) / 2,
+                           (m_start.getY() + m_end.getY()) / 2), SnapType::Midpoint});
+    return snaps;
 }

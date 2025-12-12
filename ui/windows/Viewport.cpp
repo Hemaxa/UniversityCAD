@@ -71,14 +71,29 @@ void Viewport::setActiveTool(PrimitiveType type, int subMethod) {
     m_selectedObjects.clear();
     emit selectionChanged({});
 
+    // Передаем subMethod в инструменты
     switch (type) {
-    case PrimitiveType::Segment: m_currentTool = std::make_unique<CreateSegmentTool>(); break;
-    case PrimitiveType::Circle: m_currentTool = std::make_unique<CreateCircleTool>(); break;
-    case PrimitiveType::Rectangle: m_currentTool = std::make_unique<CreateRectangleTool>(); break;
-    case PrimitiveType::Arc: m_currentTool = std::make_unique<CreateArcTool>(); break;
-    case PrimitiveType::Ellipse: m_currentTool = std::make_unique<CreateEllipseTool>(); break;
-    case PrimitiveType::Polygon: m_currentTool = std::make_unique<CreatePolygonTool>(); break;
-    case PrimitiveType::Spline: m_currentTool = std::make_unique<CreateSplineTool>(); break;
+    case PrimitiveType::Segment:
+        m_currentTool = std::make_unique<CreateSegmentTool>();
+        break;
+    case PrimitiveType::Circle:
+        m_currentTool = std::make_unique<CreateCircleTool>(subMethod);
+        break;
+    case PrimitiveType::Rectangle:
+        m_currentTool = std::make_unique<CreateRectangleTool>(subMethod);
+        break;
+    case PrimitiveType::Arc:
+        m_currentTool = std::make_unique<CreateArcTool>(subMethod);
+        break;
+    case PrimitiveType::Ellipse:
+        m_currentTool = std::make_unique<CreateEllipseTool>();
+        break;
+    case PrimitiveType::Polygon:
+        m_currentTool = std::make_unique<CreatePolygonTool>();
+        break;
+    case PrimitiveType::Spline:
+        m_currentTool = std::make_unique<CreateSplineTool>();
+        break;
     default: m_currentTool.reset(); break;
     }
     update();

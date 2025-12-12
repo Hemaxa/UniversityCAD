@@ -9,6 +9,7 @@
 
 class Scene;
 class Snapper;
+class Object; // <--- ДОБАВЛЕНО: Сообщаем компилятору, что класс Object существует
 
 class Tool {
 public:
@@ -16,7 +17,6 @@ public:
     virtual void onMousePress(const Point& worldPos, const Snapper& snapper, double scale) {}
     virtual void onMouseMove(const Point& worldPos, const Snapper& snapper, double scale) {}
     virtual void onMouseRelease(const Point& worldPos) {}
-    // Новый метод для принудительного завершения (например, правой кнопкой)
     virtual void finish() {}
 
     virtual void draw(QPainter& painter, double scale) {}
@@ -44,53 +44,55 @@ private:
     std::unique_ptr<Object> m_result;
 };
 
-// --- Circle (Center + Edge) ---
+// --- Circle ---
 class CreateCircleTool : public Tool {
 public:
+    explicit CreateCircleTool(int method); // 0:R, 1:D, 2:2P, 3:3P
     void onMousePress(const Point& worldPos, const Snapper& snapper, double scale) override;
     void onMouseMove(const Point& worldPos, const Snapper& snapper, double scale) override;
     void draw(QPainter& painter, double scale) override;
     std::unique_ptr<Object> takeObject() override;
     void reset() override;
 private:
-    std::optional<Point> m_center;
-    double m_radius = 0;
+    int m_method;
+    std::vector<Point> m_clicks;
+    Point m_cursorPos;
     std::unique_ptr<Object> m_result;
 };
 
-// --- Rectangle (Corner + Corner) ---
+// --- Rectangle ---
 class CreateRectangleTool : public Tool {
 public:
+    explicit CreateRectangleTool(int method); // 0:2P, 1:P+Size(не реализован в этом коде), 2:Center+Size
     void onMousePress(const Point& worldPos, const Snapper& snapper, double scale) override;
     void onMouseMove(const Point& worldPos, const Snapper& snapper, double scale) override;
     void draw(QPainter& painter, double scale) override;
     std::unique_ptr<Object> takeObject() override;
     void reset() override;
 private:
+    int m_method;
     std::optional<Point> m_start;
     Point m_end;
     std::unique_ptr<Object> m_result;
 };
 
-// --- Arc (Center + Radius/Start + Span) ---
+// --- Arc ---
 class CreateArcTool : public Tool {
 public:
+    explicit CreateArcTool(int method); // 0:Center, 1:3P
     void onMousePress(const Point& worldPos, const Snapper& snapper, double scale) override;
     void onMouseMove(const Point& worldPos, const Snapper& snapper, double scale) override;
     void draw(QPainter& painter, double scale) override;
     std::unique_ptr<Object> takeObject() override;
     void reset() override;
 private:
-    std::optional<Point> m_center;
-    double m_radius = 0;
-    double m_startAngle = 0;
-    double m_spanAngle = 0;
-    int m_step = 0; // 0: Center, 1: Start/Radius, 2: Span
+    int m_method;
+    std::vector<Point> m_clicks;
     Point m_cursorPos;
     std::unique_ptr<Object> m_result;
 };
 
-// --- Ellipse (Center + Corner defining Rx/Ry) ---
+// --- Ellipse ---
 class CreateEllipseTool : public Tool {
 public:
     void onMousePress(const Point& worldPos, const Snapper& snapper, double scale) override;
@@ -104,7 +106,7 @@ private:
     std::unique_ptr<Object> m_result;
 };
 
-// --- Polygon (Center + Radius, fixed 5 sides) ---
+// --- Polygon ---
 class CreatePolygonTool : public Tool {
 public:
     void onMousePress(const Point& worldPos, const Snapper& snapper, double scale) override;
@@ -118,12 +120,12 @@ private:
     std::unique_ptr<Object> m_result;
 };
 
-// --- Spline (Points...) ---
+// --- Spline ---
 class CreateSplineTool : public Tool {
 public:
     void onMousePress(const Point& worldPos, const Snapper& snapper, double scale) override;
     void onMouseMove(const Point& worldPos, const Snapper& snapper, double scale) override;
-    void finish() override; // Вызывается по ПКМ
+    void finish() override;
     void draw(QPainter& painter, double scale) override;
     std::unique_ptr<Object> takeObject() override;
     void reset() override;

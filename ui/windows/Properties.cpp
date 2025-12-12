@@ -8,6 +8,7 @@
 #include "Polygon.h"
 #include "Spline.h"
 #include "StyleDialog.h"
+#include "MathUtils.h" // Важное исправление: подключаем общую математику
 
 #include <QVBoxLayout>
 #include <QGridLayout>
@@ -25,23 +26,7 @@
 #include <cmath>
 #include <QtMath>
 
-namespace MathUtils {
-bool getCircleFrom3Points(const Point& p1, const Point& p2, const Point& p3, Point& center, double& radius) {
-    double x1 = p1.getX(), y1 = p1.getY();
-    double x2 = p2.getX(), y2 = p2.getY();
-    double x3 = p3.getX(), y3 = p3.getY();
-    double D = 2 * (x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2));
-    if (std::abs(D) < 1e-9) return false;
-    double Ux = ((x1*x1 + y1*y1) * (y2 - y3) + (x2*x2 + y2*y2) * (y3 - y1) + (x3*x3 + y3*y3) * (y1 - y2)) / D;
-    double Uy = ((x1*x1 + y1*y1) * (x3 - x2) + (x2*x2 + y2*y2) * (x1 - x3) + (x3*x3 + y3*y3) * (x2 - x1)) / D;
-    center = Point(Ux, Uy);
-    radius = std::sqrt(std::pow(Ux - x1, 2) + std::pow(Uy - y1, 2));
-    return true;
-}
-double dist(const Point& p1, const Point& p2) {
-    return std::sqrt(std::pow(p1.getX() - p2.getX(), 2) + std::pow(p1.getY() - p2.getY(), 2));
-}
-}
+// Локальное определение MathUtils удалено
 
 static QDoubleSpinBox* createSpin(double val = 0, double min = -100000, double max = 100000) {
     auto* s = new QDoubleSpinBox();
@@ -77,7 +62,6 @@ Properties::Properties(QWidget *parent) : QWidget(parent), m_isCreationMode(true
     m_placeholderWidget = createPlaceholder();
     m_stack->addWidget(m_placeholderWidget);
 
-    // Инициализация виджетов примитивов
     m_primitiveWidgets[PrimitiveType::Segment] = createSegmentWidget();
     m_primitiveWidgets[PrimitiveType::Circle] = createCircleWidget();
     m_primitiveWidgets[PrimitiveType::Arc] = createArcWidget();
@@ -111,15 +95,16 @@ Properties::Properties(QWidget *parent) : QWidget(parent), m_isCreationMode(true
 
     connect(m_applyButton, &QPushButton::clicked, this, &Properties::onApplyClicked);
 
+    // Стили (без width)
     m_availableStyles = {
-        {LineStyleType::SolidMain, "Сплошная основная", 2.0, 0, 0, true},
-        {LineStyleType::SolidThin, "Сплошная тонкая", 1.0, 0, 0, true},
-        {LineStyleType::SolidWavy, "Сплошная волнистая", 1.0, 0, 0, true},
-        {LineStyleType::SolidZigZag, "Сплошная с изломами", 1.0, 0, 0, true},
-        {LineStyleType::Dashed, "Штриховая", 1.0, 4.0, 2.0, true},
-        {LineStyleType::DashDotThin, "Штрихпунктирная тонкая", 1.0, 10.0, 3.0, true},
-        {LineStyleType::DashDotThick, "Штрихпунктирная толстая", 2.0, 10.0, 3.0, true},
-        {LineStyleType::DashDotDot, "С двумя точками", 1.0, 10.0, 3.0, true}
+        {LineStyleType::SolidMain, "Сплошная основная", 0, 0, true},
+        {LineStyleType::SolidThin, "Сплошная тонкая", 0, 0, true},
+        {LineStyleType::SolidWavy, "Сплошная волнистая", 0, 0, true},
+        {LineStyleType::SolidZigZag, "Сплошная с изломами", 0, 0, true},
+        {LineStyleType::Dashed, "Штриховая", 4.0, 2.0, true},
+        {LineStyleType::DashDotThin, "Штрихпунктирная тонкая", 10.0, 3.0, true},
+        {LineStyleType::DashDotThick, "Штрихпунктирная толстая", 10.0, 3.0, true},
+        {LineStyleType::DashDotDot, "С двумя точками", 10.0, 3.0, true}
     };
     m_currentStyle = m_availableStyles[0];
 
@@ -537,10 +522,6 @@ QGroupBox* Properties::createStyleWidget() {
     m_stylePresetButton->setObjectName("StylePresetButton");
     connect(m_stylePresetButton, &QPushButton::clicked, this, &Properties::showStyleMenu);
 
-    m_lineWidthSpin = new QDoubleSpinBox();
-    m_lineWidthSpin->setRange(0.1, 20);
-    m_lineWidthSpin->setValue(2.0);
-
     m_colorButton = new QPushButton();
     m_colorButton->setFixedSize(40, 20);
     m_colorButton->setObjectName("ColorPickerButton");
@@ -548,7 +529,7 @@ QGroupBox* Properties::createStyleWidget() {
     connect(m_colorButton, &QPushButton::clicked, this, &Properties::onColorButtonClicked);
 
     addRow(grid, 0, createLbl("Тип:"), m_stylePresetButton);
-    addRow(grid, 1, createLbl("Толщина:"), m_lineWidthSpin, createLbl("Цвет:"), m_colorButton);
+    addRow(grid, 1, createLbl("Цвет:"), m_colorButton);
     return group;
 }
 
@@ -634,8 +615,7 @@ void Properties::onRemoveSplinePoint() {
 void Properties::applyCurrentStyleTo(Object* obj) const {
     if(!obj) return;
     LineStyle s = m_currentStyle;
-    s.width = m_lineWidthSpin->value();
-    obj->setLineStyle(s);
+    // obj->setLineStyle(s); // Ширина теперь глобальная
     obj->setColor(m_selectedColor);
 }
 
@@ -652,11 +632,37 @@ void Properties::showCreationPropertiesFor(PrimitiveType type, int methodIndex) 
     }
     else {
         m_stack->setCurrentWidget(m_primitiveWidgets[type]);
+
+        // СИНХРОНИЗАЦИЯ С МЕТОДОМ
+        if (type == PrimitiveType::Circle) {
+            m_circleMethodCombo->blockSignals(true);
+            m_circleMethodCombo->setCurrentIndex(methodIndex);
+            m_circleStack->setCurrentIndex(methodIndex);
+            m_circleMethodCombo->blockSignals(false);
+        }
+        else if (type == PrimitiveType::Rectangle) {
+            m_rectMethodCombo->blockSignals(true);
+            m_rectMethodCombo->setCurrentIndex(methodIndex);
+            m_rectStack->setCurrentIndex(methodIndex);
+            m_rectMethodCombo->blockSignals(false);
+        }
+        else if (type == PrimitiveType::Arc) {
+            m_arcMethodCombo->blockSignals(true);
+            m_arcMethodCombo->setCurrentIndex(methodIndex);
+            m_arcStack->setCurrentIndex(methodIndex);
+            m_arcMethodCombo->blockSignals(false);
+        }
+        else if (type == PrimitiveType::Ellipse) {
+            m_ellMethodCombo->blockSignals(true);
+            m_ellMethodCombo->setCurrentIndex(methodIndex);
+            m_ellStack->setCurrentIndex(methodIndex);
+            m_ellMethodCombo->blockSignals(false);
+        }
+
         m_styleGroup->show();
     }
 
     m_stylePresetButton->setText(m_currentStyle.name);
-    m_lineWidthSpin->setValue(m_currentStyle.width);
     m_colorButton->setStyleSheet(QString("background-color: %1").arg(m_selectedColor.name()));
 }
 
@@ -764,10 +770,8 @@ void Properties::populateFields(Object* obj) {
 
 void Properties::populateStyleFields(const std::vector<Object*>& objects) {
     if(objects.empty()) return;
-
     bool sameColor = true;
     bool sameStyle = true;
-    bool sameWidth = true;
 
     QColor firstColor = objects[0]->getColor();
     LineStyle firstStyle = objects[0]->getLineStyle();
@@ -775,7 +779,6 @@ void Properties::populateStyleFields(const std::vector<Object*>& objects) {
     for(auto* obj : objects) {
         if(obj->getColor() != firstColor) sameColor = false;
         if(obj->getLineStyle().type != firstStyle.type) sameStyle = false;
-        if(std::abs(obj->getLineStyle().width - firstStyle.width) > 1e-5) sameWidth = false;
     }
 
     if (sameColor) {
@@ -790,14 +793,6 @@ void Properties::populateStyleFields(const std::vector<Object*>& objects) {
         m_stylePresetButton->setText(firstStyle.name);
     } else {
         m_stylePresetButton->setText("Разные типы");
-    }
-
-    if (sameWidth) {
-        m_lineWidthSpin->setValue(firstStyle.width);
-        m_lineWidthSpin->setSpecialValueText("");
-    } else {
-        m_lineWidthSpin->setValue(0);
-        m_lineWidthSpin->setSpecialValueText("Разные");
     }
 }
 
@@ -934,12 +929,10 @@ void Properties::updateObjectGeometry(Object* obj) {
 }
 
 void Properties::onApplyClicked() {
-    LineStyle s = m_currentStyle;
-    s.width = m_lineWidthSpin->value();
-
     if (m_isCreationMode) {
         std::unique_ptr<Object> newObj;
         switch(m_activeType) {
+        // Создаем объекты по параметрам из полей (нажатие кнопки "Создать")
         case PrimitiveType::Segment: newObj=std::make_unique<Segment>(Point(), Point()); break;
         case PrimitiveType::Circle: newObj = std::make_unique<Circle>(Point(), 10); break;
         case PrimitiveType::Arc: newObj = std::make_unique<Arc>(Point(), 10, 0, 90); break;
@@ -957,15 +950,10 @@ void Properties::onApplyClicked() {
         }
     } else {
         for (auto* obj : m_currentObjects) {
-            if (m_lineWidthSpin->specialValueText().isEmpty()) {
-                auto st = obj->getLineStyle();
-                st.width = s.width;
-                obj->setLineStyle(st);
-            }
             if (m_stylePresetButton->text() != "Разные типы") {
                 auto st = obj->getLineStyle();
-                st.type = s.type; st.name = s.name;
-                st.dashLength = s.dashLength; st.gapLength = s.gapLength;
+                st.type = m_currentStyle.type; st.name = m_currentStyle.name;
+                st.dashLength = m_currentStyle.dashLength; st.gapLength = m_currentStyle.gapLength;
                 obj->setLineStyle(st);
             }
             if (m_selectedColor.isValid()) {
@@ -991,8 +979,6 @@ void Properties::showStyleMenu() {
         menu.addAction(s.name, this, [this, s](){
             m_currentStyle = s;
             m_stylePresetButton->setText(s.name);
-            m_lineWidthSpin->setValue(s.width);
-            m_lineWidthSpin->setSpecialValueText("");
         });
     }
     menu.addSeparator();
