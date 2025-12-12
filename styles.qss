@@ -171,6 +171,7 @@ QToolButton {
     min-height: 15px;
 }
 
+/* Обычные текстовые кнопки */
 QToolButton:hover { border-color: #66D9EF; }
 QToolButton:checked {
     background-color: #66D9EF;
@@ -178,7 +179,7 @@ QToolButton:checked {
     border-color: #66D9EF;
 }
 
-/* Кнопки-иконки (инструменты рисования) */
+/* --- Кнопки-иконки (Инструменты и Popup меню) --- */
 QToolButton[isIconButton="true"] {
     min-width: 28px; max-width: 28px;
     min-height: 28px; max-height: 28px;
@@ -187,8 +188,26 @@ QToolButton[isIconButton="true"] {
     border: 1px solid #4A4A5A;
     border-radius: 4px;
 }
-QToolButton[isIconButton="true"]:hover { border-color: #F92672; }
-QToolButton[isIconButton="true"]:checked { border-color: #F92672; }
+
+/* Розовая рамка при наведении */
+QToolButton[isIconButton="true"]:hover {
+    border: 1px solid #F92672;
+    background-color: #383949; /* Чуть светлее фон для реакции */
+}
+
+/* Розовая рамка и фон при нажатии (активный инструмент) */
+QToolButton[isIconButton="true"]:checked {
+    background-color: #F92672;
+    border: 1px solid #F92672;
+    color: white; /* Если бы был текст */
+}
+
+/* Стиль для индикатора popup (если бы мы использовали CSS, но мы рисуем в C++) */
+/* Оставляем пустым, чтобы не мешал */
+QToolButton[isIconButton="true"][hasPopup="true"] {
+    padding-bottom: 2px;
+    padding-right: 2px;
+}
 
 /* =================================================================== */
 /* СПИСКИ (QListWidget) */
