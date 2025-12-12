@@ -4,19 +4,18 @@
 
 class Ellipse : public Object {
 public:
-    Ellipse(const Point& center, double radX, double radY)
-        : m_center(center), m_radiusX(radX), m_radiusY(radY) {}
+    Ellipse(const Point& center, double radX, double radY);
 
     PrimitiveType getType() const override { return PrimitiveType::Ellipse; }
 
-    const Point& getCenter() const { return m_center; }
-    void setCenter(const Point& p) { m_center = p; }
+    const Point& getCenter() const;
+    void setCenter(const Point& p);
 
-    double getRadiusX() const { return m_radiusX; }
-    void setRadiusX(double r) { m_radiusX = r; }
+    double getRadiusX() const;
+    void setRadiusX(double r);
 
-    double getRadiusY() const { return m_radiusY; }
-    void setRadiusY(double r) { m_radiusY = r; }
+    double getRadiusY() const;
+    void setRadiusY(double r);
 
 private:
     Point m_center;

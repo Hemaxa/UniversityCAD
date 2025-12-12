@@ -29,16 +29,18 @@ private slots:
     void onAngleUnitChanged(AngleUnit unit);
     void onPrimitiveTypeSelected(PrimitiveType type);
 
-    void createSegment(const Point& start, const Point& end, const QColor& color, const LineStyle& style);
     void onDeleteRequested();
 
     // Слот при выборе во Viewport
     void onObjectsSelected(const std::vector<Object*>& selectedObjects);
 
-    // Новый слот при выборе в Control (Списке)
+    // Слот при выборе в Control (Списке)
     void onObjectsSelectedFromList(const std::vector<Object*>& selectedObjects);
 
     void onObjectsModified(const std::vector<Object*>& objs);
+
+    // ИСПРАВЛЕНО: Принимаем сырой указатель (Object*), чтобы обойти ограничения MOC на unique_ptr
+    void onObjectCreateRequested(Object* obj);
 
     // Слот для кнопки Escape
     void onEscapePressed();

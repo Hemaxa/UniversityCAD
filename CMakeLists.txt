@@ -10,14 +10,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
-add_executable(UniversityCAD
-    core/objects/Circle.h core/objects/Circle.cpp
-    core/objects/Arc.h core/objects/Arc.cpp
-    core/objects/Rectangle.h core/objects/Rectangle.cpp
-    core/objects/Ellipse.h core/objects/Ellipse.cpp
-    core/objects/Polygon.h core/objects/Polygon.cpp
-    core/objects/Spline.h core/objects/Spline.cpp
-    draw/PrimitiveStrategies.h draw/PrimitiveStrategies.cpp)
+add_executable(UniversityCAD)
 
 target_sources (UniversityCAD PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Main.cpp
@@ -39,8 +32,8 @@ target_sources (UniversityCAD PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/Viewport.cpp
 
     ${CMAKE_CURRENT_SOURCE_DIR}/draw/Draw.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/draw/SegmentDraw.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/draw/SegmentDraw.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/draw/PrimitiveStrategies.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/draw/PrimitiveStrategies.cpp
 
     ${CMAKE_CURRENT_SOURCE_DIR}/core/Camera.h
     ${CMAKE_CURRENT_SOURCE_DIR}/core/Camera.cpp
@@ -49,6 +42,18 @@ target_sources (UniversityCAD PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/core/Scene.cpp
 
     ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Object.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Circle.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Circle.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Arc.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Arc.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Rectangle.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Rectangle.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Ellipse.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Ellipse.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Polygon.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Polygon.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Spline.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Spline.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Point.h
     ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Point.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Segment.h

@@ -5,14 +5,14 @@
 
 class Spline : public Object {
 public:
-    Spline(const std::vector<Point>& points) : m_points(points) {}
+    Spline(const std::vector<Point>& points);
 
     PrimitiveType getType() const override { return PrimitiveType::Spline; }
 
-    const std::vector<Point>& getPoints() const { return m_points; }
-    void setPoints(const std::vector<Point>& points) { m_points = points; }
+    const std::vector<Point>& getPoints() const;
+    void setPoints(const std::vector<Point>& points);
 
-    void addPoint(const Point& p) { m_points.push_back(p); }
+    void addPoint(const Point& p);
 
 private:
     std::vector<Point> m_points;

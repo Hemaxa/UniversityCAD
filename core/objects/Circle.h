@@ -4,14 +4,15 @@
 
 class Circle : public Object {
 public:
-    Circle(const Point& center, double radius) : m_center(center), m_radius(radius) {}
+    Circle(const Point& center, double radius);
+
     PrimitiveType getType() const override { return PrimitiveType::Circle; }
 
-    const Point& getCenter() const { return m_center; }
-    void setCenter(const Point& p) { m_center = p; }
+    const Point& getCenter() const;
+    void setCenter(const Point& p);
 
-    double getRadius() const { return m_radius; }
-    void setRadius(double r) { m_radius = r; }
+    double getRadius() const;
+    void setRadius(double r);
 
 private:
     Point m_center;

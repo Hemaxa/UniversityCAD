@@ -1,11 +1,20 @@
 #pragma once
 #include "Draw.h"
+
+// Включаем классы объектов, чтобы стратегии знали о них
+#include "Segment.h"
 #include "Circle.h"
 #include "Arc.h"
-#include "RectanglePrim.h"
+#include "Rectangle.h" // Используем RectanglePrim во избежание конфликтов
 #include "Ellipse.h"
 #include "Polygon.h"
 #include "Spline.h"
+
+// --- Segment (Логика перенесена сюда) ---
+class SegmentDraw : public Draw {
+public:
+    void draw(QPainter& painter, Object* primitive, bool isSelected) const override;
+};
 
 // --- Circle ---
 class CircleDraw : public Draw {

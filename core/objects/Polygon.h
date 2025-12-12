@@ -4,22 +4,21 @@
 
 class PolygonObj : public Object {
 public:
-    PolygonObj(const Point& center, double radius, int sides, bool inscribed = true)
-        : m_center(center), m_radius(radius), m_sides(sides), m_inscribed(inscribed) {}
+    PolygonObj(const Point& center, double radius, int sides, bool inscribed = true);
 
     PrimitiveType getType() const override { return PrimitiveType::Polygon; }
 
-    const Point& getCenter() const { return m_center; }
-    void setCenter(const Point& p) { m_center = p; }
+    const Point& getCenter() const;
+    void setCenter(const Point& p);
 
-    double getRadius() const { return m_radius; }
-    void setRadius(double r) { m_radius = r; }
+    double getRadius() const;
+    void setRadius(double r);
 
-    int getSides() const { return m_sides; }
-    void setSides(int s) { m_sides = s; }
+    int getSides() const;
+    void setSides(int s);
 
-    bool isInscribed() const { return m_inscribed; }
-    void setInscribed(bool i) { m_inscribed = i; }
+    bool isInscribed() const;
+    void setInscribed(bool i);
 
 private:
     Point m_center;
