@@ -162,32 +162,32 @@ Control::Control(QWidget *parent) : QWidget(parent)
     // Окружность: 4 метода
     // 0: Центр-Радиус, 1: Центр-Диаметр, 2: 2 точки (Диаметр), 3: 3 точки
     addTool(":/icons/circle.svg", "Окружность", PrimitiveType::Circle, {
-                                                                           {":/icons/circle.svg", 0}, // Используем одну иконку, можно сделать разные
-                                                                           {":/icons/circle.svg", 1},
-                                                                           {":/icons/circle.svg", 2},
-                                                                           {":/icons/circle.svg", 3}
-                                                                       });
+       {":/icons/circle-1.svg", 0},
+       {":/icons/circle-2.svg", 1},
+       {":/icons/circle-3.svg", 2},
+       {":/icons/circle-4.svg", 3}
+   });
 
     // Дуга: 2 метода
     // 0: Центр-Углы, 1: 3 точки
     addTool(":/icons/arc.svg", "Дуга", PrimitiveType::Arc, {
-                                                               {":/icons/arc.svg", 0},
-                                                               {":/icons/arc.svg", 1}
-                                                           });
+       {":/icons/arc-1.svg", 0},
+       {":/icons/arc-2.svg", 1}
+   });
 
     // Прямоугольник: 3 метода
     // 0: 2 точки, 1: Точка+Размер, 2: Центр+Размер
     addTool(":/icons/rectangle.svg", "Прямоугольник", PrimitiveType::Rectangle, {
-                                                                                    {":/icons/rectangle.svg", 0},
-                                                                                    {":/icons/rectangle.svg", 1},
-                                                                                    {":/icons/rectangle.svg", 2}
-                                                                                });
+        {":/icons/rectangle-1.svg", 0},
+        {":/icons/rectangle-2.svg", 1},
+        {":/icons/rectangle-3.svg", 2}
+    });
 
     // Эллипс: 2 метода (Центр+Радиусы, Центр+Точки осей)
     addTool(":/icons/ellipse.svg", "Эллипс", PrimitiveType::Ellipse, {
-                                                                         {":/icons/ellipse.svg", 0},
-                                                                         {":/icons/ellipse.svg", 1}
-                                                                     });
+        {":/icons/ellipse-1.svg", 0},
+        {":/icons/ellipse-2.svg", 1}
+    });
 
     // Полигон
     addTool(":/icons/polygon.svg", "Многоугольник", PrimitiveType::Polygon, {});

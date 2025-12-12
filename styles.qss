@@ -12,6 +12,32 @@ QWidget {
 }
 
 /* =================================================================== */
+/* SCROLL AREA */
+/* =================================================================== */
+QScrollArea {
+    border: none;
+    background-color: transparent;
+}
+
+QScrollBar:vertical {
+    border: none;
+    background: #1A1B26;
+    width: 8px;
+    margin: 0px 0px 0px 0px;
+}
+QScrollBar::handle:vertical {
+    background: #4A4A5A;
+    min-height: 20px;
+    border-radius: 4px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #F92672;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+/* =================================================================== */
 /* ПАНЕЛИ И РАЗДЕЛИТЕЛИ */
 /* =================================================================== */
 #ControlPanel, #PropertiesPanel {
@@ -44,11 +70,6 @@ QGroupBox::title {
     padding: 0 8px;
 }
 
-#ControlPanel > QGroupBox:first-child,
-#PropertiesPanel > QGroupBox:first-child {
-    margin-top: 0;
-}
-
 /* =================================================================== */
 /* ПОЛЯ ВВОДА */
 /* =================================================================== */
@@ -59,7 +80,7 @@ QDoubleSpinBox, QSpinBox, QComboBox, QLineEdit {
     border-radius: 4px;
     padding: 4px 6px;
     min-height: 20px;
-    min-width: 60px; /* Немного уменьшил минимальную ширину */
+    min-width: 60px;
 }
 
 QDoubleSpinBox:focus, QSpinBox:focus, QComboBox:focus, QLineEdit:focus {
@@ -148,14 +169,12 @@ QPushButton:pressed { background-color: #D3205E; }
 #ColorPickerButton {
     border: 1px solid #777777;
     min-height: 10px; min-width: 10px;
-    max-height: 10px; max-width: 10px;
+    max-height: 10px;
+    max-width: 10px;
     border-radius: 5px;
 }
 #ColorPickerButton:hover {
     border: 1px solid #66D9EF;
-}
-#ColorPickerButton[mixed="true"] {
-    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 red, stop:0.5 green, stop:1 blue);
 }
 
 /* =================================================================== */
@@ -171,7 +190,6 @@ QToolButton {
     min-height: 15px;
 }
 
-/* Обычные текстовые кнопки */
 QToolButton:hover { border-color: #66D9EF; }
 QToolButton:checked {
     background-color: #66D9EF;
@@ -179,31 +197,27 @@ QToolButton:checked {
     border-color: #66D9EF;
 }
 
-/* --- Кнопки-иконки (Инструменты и Popup меню) --- */
 QToolButton[isIconButton="true"] {
     min-width: 28px; max-width: 28px;
-    min-height: 28px; max-height: 28px;
+    min-height: 28px;
+    max-height: 28px;
     padding: 4px;
     background-color: #313241;
     border: 1px solid #4A4A5A;
     border-radius: 4px;
 }
 
-/* Розовая рамка при наведении */
 QToolButton[isIconButton="true"]:hover {
     border: 1px solid #F92672;
-    background-color: #383949; /* Чуть светлее фон для реакции */
+    background-color: #383949;
 }
 
-/* Розовая рамка и фон при нажатии (активный инструмент) */
 QToolButton[isIconButton="true"]:checked {
     background-color: #F92672;
     border: 1px solid #F92672;
-    color: white; /* Если бы был текст */
+    color: white;
 }
 
-/* Стиль для индикатора popup (если бы мы использовали CSS, но мы рисуем в C++) */
-/* Оставляем пустым, чтобы не мешал */
 QToolButton[isIconButton="true"][hasPopup="true"] {
     padding-bottom: 2px;
     padding-right: 2px;
@@ -215,7 +229,7 @@ QToolButton[isIconButton="true"][hasPopup="true"] {
 QListWidget {
     border: 1px solid #4A4A5A;
     border-radius: 4px;
-    background-color: #1A1B26; /* Уточнение фона */
+    background-color: #1A1B26;
 }
 QListWidget::item { padding: 5px; }
 QListWidget::item:selected { background-color: #F92672; color: white; }
@@ -232,7 +246,6 @@ QListWidget::item:selected { background-color: #F92672; color: white; }
     color: #A6E22E;
 }
 
-/* Плейсхолдер текст в свойствах */
 #PlaceholderLabel {
     color: #777777;
     font-style: italic;
@@ -249,7 +262,7 @@ QMenu {
 }
 
 QMenu::item {
-    padding: 8px 25px 8px 32px; /* Место под иконку */
+    padding: 8px 25px 8px 32px;
     color: #F0F0F0;
     font-size: 14px;
 }
@@ -267,9 +280,6 @@ QMenu::separator {
     margin: 5px 10px;
 }
 
-/* =================================================================== */
-/* ДИАЛОГИ (StyleDialog и другие) */
-/* =================================================================== */
 QDialog {
     background-color: #1A1B26;
     color: #F0F0F0;
