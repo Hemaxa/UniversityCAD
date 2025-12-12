@@ -10,9 +10,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
-add_executable(UniversityCAD
-    core/Snapper.h core/Snapper.cpp
-    core/Tools.h core/Tools.cpp)
+add_executable(UniversityCAD)
 
 target_sources (UniversityCAD PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Main.cpp
@@ -28,6 +26,8 @@ target_sources (UniversityCAD PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/ContextMenu.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/Control.h
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/Control.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/LineSettingsMenu.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/LineSettingsMenu.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/Properties.h
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/Properties.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/Viewport.h
@@ -40,8 +40,13 @@ target_sources (UniversityCAD PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/core/Camera.h
     ${CMAKE_CURRENT_SOURCE_DIR}/core/Camera.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/core/Enums.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/GlobalSettings.h
     ${CMAKE_CURRENT_SOURCE_DIR}/core/Scene.h
     ${CMAKE_CURRENT_SOURCE_DIR}/core/Scene.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/Snapper.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/Snapper.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/Tools.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/Tools.cpp
 
     ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Object.h
     ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Circle.h

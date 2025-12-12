@@ -1,6 +1,7 @@
 #include "Control.h"
 #include "Scene.h"
 #include "Object.h"
+#include "LineSettingsMenu.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -19,7 +20,6 @@
 #include <QScrollArea>
 #include <QIcon>
 
-// --- LongPressButton implementations (same as before) ---
 LongPressButton::LongPressButton(QWidget* parent) : QToolButton(parent) {
     m_longPressTimer.setSingleShot(true); m_longPressTimer.setInterval(400);
     connect(&m_longPressTimer, &QTimer::timeout, this, &LongPressButton::onTimerTimeout);
@@ -38,8 +38,6 @@ void LongPressButton::mousePressEvent(QMouseEvent* e) { if(e->button() == Qt::Le
 void LongPressButton::mouseReleaseEvent(QMouseEvent* e) { m_longPressTimer.stop(); if (!m_isLongPressHandled) { QToolButton::mouseReleaseEvent(e); } else { setDown(false); } }
 void LongPressButton::onTimerTimeout() { m_isLongPressHandled = true; if (m_popupWidget) { QPoint gp = mapToGlobal(QPoint(0,0)); m_popupWidget->adjustSize(); m_popupWidget->move(gp.x(), gp.y() - m_popupWidget->height() - 2); m_popupWidget->show(); } emit longPressActivated(); }
 
-
-// --- Control Panel ---
 Control::Control(QWidget *parent) : QWidget(parent)
 {
     this->setObjectName("ControlPanel");
@@ -48,7 +46,6 @@ Control::Control(QWidget *parent) : QWidget(parent)
     QWidget* scrollContent = new QWidget();
     auto* contentLayout = new QVBoxLayout(scrollContent); contentLayout->setContentsMargins(8, 8, 8, 8); contentLayout->setSpacing(10); contentLayout->setAlignment(Qt::AlignTop);
 
-    // --- 1. Параметры сцены ---
     auto* sceneGroup = new QGroupBox("Параметры сцены");
     auto* sceneLayout = new QGridLayout(sceneGroup);
     m_gridStepSpinBox = new QSpinBox(); m_gridStepSpinBox->setRange(10, 200); m_gridStepSpinBox->setValue(50);
@@ -65,13 +62,20 @@ Control::Control(QWidget *parent) : QWidget(parent)
     coordLayout->addWidget(m_cartesianBtn); coordLayout->addWidget(m_polarBtn);
     sceneLayout->addLayout(coordLayout, 1, 2, 1, 2);
 
-    // Добавляем чекбоксы привязок
     m_gridSnapCheck = new QCheckBox("Привязка к сетке");
     m_objSnapCheck = new QCheckBox("Привязка к объектам"); m_objSnapCheck->setChecked(true);
     sceneLayout->addWidget(m_gridSnapCheck, 2, 0, 1, 2);
     sceneLayout->addWidget(m_objSnapCheck, 2, 2, 1, 2);
 
-    // --- 2. Инструменты ---
+    auto* lineSettingsBtn = new QPushButton("Настройки линий");
+    lineSettingsBtn->setIcon(QIcon(":/icons/settings.svg"));
+    auto* lineMenu = new LineSettingsMenu(this);
+    connect(lineMenu, &LineSettingsMenu::settingsChanged, this, [this](){
+        if(parentWidget()) parentWidget()->update();
+    });
+    lineSettingsBtn->setMenu(lineMenu);
+    sceneLayout->addWidget(lineSettingsBtn, 3, 0, 1, 4);
+
     auto* primitivesGroup = new QGroupBox("Инструменты"); auto* primGrid = new QGridLayout(primitivesGroup); primGrid->setSpacing(5);
     m_primitiveToolsGroup = new QButtonGroup(this); m_primitiveToolsGroup->setExclusive(true);
     connect(m_primitiveToolsGroup, &QButtonGroup::idClicked, this, &Control::onPrimitiveToolClicked);
@@ -91,7 +95,6 @@ Control::Control(QWidget *parent) : QWidget(parent)
     addTool(":/icons/polygon.svg", "Многоугольник", PrimitiveType::Polygon, {});
     addTool(":/icons/spline.svg", "Сплайн", PrimitiveType::Spline, {});
 
-    // --- 3. Список объектов ---
     auto* objectsGroup = new QGroupBox("Список объектов"); auto* objectsLayout = new QVBoxLayout(objectsGroup);
     m_objectListWidget = new QListWidget(); m_objectListWidget->setSelectionMode(QAbstractItemView::ExtendedSelection); m_objectListWidget->setMinimumHeight(150);
     m_deleteBtn = new QPushButton("Удалить"); m_deleteBtn->setObjectName("deleteButton");
@@ -107,14 +110,10 @@ Control::Control(QWidget *parent) : QWidget(parent)
     connect(m_objectListWidget, &QListWidget::itemSelectionChanged, this, &Control::onSelectionChanged);
     connect(m_deleteBtn, &QPushButton::clicked, this, &Control::deleteRequested);
     connect(m_angleUnitComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index){ emit angleUnitChanged(static_cast<AngleUnit>(m_angleUnitComboBox->itemData(index).toInt())); });
-
-    // Подключение новых сигналов
     connect(m_gridSnapCheck, &QCheckBox::toggled, this, &Control::gridSnapToggled);
     connect(m_objSnapCheck, &QCheckBox::toggled, this, &Control::objectSnapToggled);
 }
 
-// ... Остальные методы (createVariantPopup, onPrimitiveToolClicked и т.д.) без изменений ...
-// Вставьте их сюда для полной компиляции.
 QWidget* Control::createVariantPopup(LongPressButton* mainBtn, const std::vector<std::pair<QString, int>>& variants, PrimitiveType type) {
     QWidget* popup = new QWidget(this); popup->setWindowFlags(Qt::Popup | Qt::FramelessWindowHint); popup->setAttribute(Qt::WA_TranslucentBackground);
     QVBoxLayout* layout = new QVBoxLayout(popup); layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(0);

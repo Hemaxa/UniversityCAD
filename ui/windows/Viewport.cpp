@@ -44,7 +44,7 @@ Viewport::Viewport(QWidget *parent) : QWidget(parent)
 
     m_infoLabel = new QLabel(this);
     m_infoLabel->setObjectName("InfoLabel");
-    m_infoLabel->setFixedSize(200, 80); // Увеличил ширину для вместимости зума и сетки
+    m_infoLabel->setFixedSize(200, 80);
     m_infoLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 
     auto* layout = new QGridLayout(this);
@@ -74,6 +74,11 @@ void Viewport::setActiveTool(PrimitiveType type, int subMethod) {
     switch (type) {
     case PrimitiveType::Segment: m_currentTool = std::make_unique<CreateSegmentTool>(); break;
     case PrimitiveType::Circle: m_currentTool = std::make_unique<CreateCircleTool>(); break;
+    case PrimitiveType::Rectangle: m_currentTool = std::make_unique<CreateRectangleTool>(); break;
+    case PrimitiveType::Arc: m_currentTool = std::make_unique<CreateArcTool>(); break;
+    case PrimitiveType::Ellipse: m_currentTool = std::make_unique<CreateEllipseTool>(); break;
+    case PrimitiveType::Polygon: m_currentTool = std::make_unique<CreatePolygonTool>(); break;
+    case PrimitiveType::Spline: m_currentTool = std::make_unique<CreateSplineTool>(); break;
     default: m_currentTool.reset(); break;
     }
     update();
@@ -115,27 +120,18 @@ void Viewport::paintEvent(QPaintEvent *event) {
     }
 }
 
-// --- Хелпер для получения точки с учетом привязки ---
 Point getSnappedPoint(const Point& rawWorldP, Snapper* snapper, double scale, bool objSnap, bool gridSnap, int gridStep) {
     Point result = rawWorldP;
-    bool snapped = false;
-
-    // 1. Привязка к объектам (приоритет)
     if (objSnap && snapper) {
         auto res = snapper->snap(rawWorldP, scale);
-        if (res.snapped) {
-            return res.point;
-        }
+        if (res.snapped) return res.point;
     }
-
-    // 2. Привязка к сетке (если не сработала объектная)
     if (gridSnap) {
         double gs = (double)gridStep;
         double x = std::round(rawWorldP.getX() / gs) * gs;
         double y = std::round(rawWorldP.getY() / gs) * gs;
         result = Point(x, y);
     }
-
     return result;
 }
 
@@ -146,28 +142,6 @@ void Viewport::mousePressEvent(QMouseEvent *event) {
 
     QPointF worldF = screenToWorld(event->position());
     Point worldP(worldF.x(), worldF.y());
-
-    // Используем модифицированный Snapper, который теперь вызывается из Tool,
-    // но Tool нужно обновить, чтобы он знал про флаги.
-    // Пока сделаем хак: передадим в Tool уже "исправленный" мир, если это не объектная привязка.
-    // А для объектной привязки Tool сам вызывает snapper.
-
-    // Но лучше просто передать в Tool инфу о флагах или обрабатывать в Snapper.
-    // В текущей архитектуре Tool вызывает snapper.snap().
-    // Мы можем модифицировать Snapper::snap или передавать туда флаги.
-    // Поскольку Tools.cpp не менялся в этом шаге, пойдем путем настройки Snapper перед вызовом?
-    // Нет, Snapper stateless.
-
-    // ВАЖНО: Tools.cpp вызывает snapper.snap() только для объектов.
-    // Для сетки нам нужно модифицировать Tools.cpp или подменять координату ДО tool.
-
-    // В данном решении: я обновлю логику Tools.cpp неявно, подменяя Snapper::snap
-    // или (проще) - передадим worldP с учетом Grid Snap в Tool, если Object Snap не сработал.
-    // Но Tool сам проверяет Object Snap.
-
-    // ЛУЧШЕЕ РЕШЕНИЕ: Обновить core/Snapper.cpp чтобы он учитывал сетку, если попросят.
-    // Передадим Grid Snap параметры в Snapper через конструктор или сеттер?
-    // Snapper создается один раз. Добавим сеттеры в Snapper.h (ниже).
 
     if (m_snapper) {
         m_snapper->setGridSnap(m_gridSnapEnabled, m_gridStep);
@@ -180,7 +154,15 @@ void Viewport::mousePressEvent(QMouseEvent *event) {
             if (m_currentTool->isFinished()) {
                 emit objectCreated(m_currentTool->takeObject().release());
                 m_currentTool->reset();
-                m_currentTool->onMousePress(worldP, *m_snapper, m_camera->getZoomFactor()); // Restart
+            }
+            update();
+        } else if (event->button() == Qt::RightButton) {
+            m_currentTool->finish();
+            if (m_currentTool->isFinished()) {
+                emit objectCreated(m_currentTool->takeObject().release());
+                m_currentTool->reset();
+            } else {
+                m_currentTool->reset();
             }
             update();
         }
@@ -222,8 +204,6 @@ void Viewport::mouseReleaseEvent(QMouseEvent *event) {
     if (event->button() == Qt::LeftButton && m_isSelecting && !m_currentTool) {
         m_isSelecting = false; m_rubberBand->hide();
         QRect selectionRect = m_rubberBand->geometry();
-
-        // --- РЕАЛИЗАЦИЯ ВЫДЕЛЕНИЯ ---
         std::vector<Object*> picked = pickObjects(selectionRect);
         m_selectedObjects = picked;
         emit selectionChanged(m_selectedObjects);
@@ -239,8 +219,6 @@ std::vector<Object*> Viewport::pickObjects(const QRect& screenRect) {
 
     for (const auto& obj : m_scene->getPrimitives()) {
         bool inside = false;
-
-        // Вспомогательная лямбда для проверки точки
         auto check = [&](const Point& p) {
             return screenRect.contains(worldToScreen(QPointF(p.getX(), p.getY())).toPoint());
         };
@@ -255,7 +233,6 @@ std::vector<Object*> Viewport::pickObjects(const QRect& screenRect) {
             auto* c = static_cast<Circle*>(obj.get());
             Point center = c->getCenter();
             double r = c->getRadius();
-            // Проверяем центр и 4 крайние точки
             if (check(center) &&
                 check(Point(center.getX()+r, center.getY())) &&
                 check(Point(center.getX()-r, center.getY())) &&
@@ -274,12 +251,10 @@ std::vector<Object*> Viewport::pickObjects(const QRect& screenRect) {
         }
         case PrimitiveType::Polygon: {
             auto* p = static_cast<PolygonObj*>(obj.get());
-            // Упрощенно проверяем центр и радиус (box)
             Point c = p->getCenter(); double r = p->getRadius();
             if (check(Point(c.getX()-r, c.getY()-r)) && check(Point(c.getX()+r, c.getY()+r))) inside = true;
             break;
         }
-        // Для остальных можно добавить логику
         default: break;
         }
 
@@ -296,17 +271,14 @@ void Viewport::updateInfoLabel() {
         coordText = QString("X: %1\nY: %2").arg(m_currentMouseWorldPos.x(), 0, 'f', 2).arg(m_currentMouseWorldPos.y(), 0, 'f', 2);
     } else {
         Point p(m_currentMouseWorldPos.x(), m_currentMouseWorldPos.y());
-        Point::setAngleUnit(AngleUnit::Degrees); // Пока для отображения
+        Point::setAngleUnit(AngleUnit::Degrees);
         coordText = QString("R: %1\nA: %2°").arg(p.getRadius(), 0, 'f', 2).arg(p.getAngle(), 0, 'f', 2);
     }
-
     QString zoomText = QString("Zoom: %1%").arg((int)(m_camera->getZoomFactor() * 100));
     QString gridText = QString("Grid: %1").arg(m_gridStep);
-
     m_infoLabel->setText(QString("%1\n%2\n%3").arg(coordText, zoomText, gridText));
 }
 
-// ... Оставшиеся методы (drawGrid, drawGizmo, helpers) копируются из предыдущего Viewport.cpp ...
 void Viewport::drawGrid(QPainter& painter, const QTransform& transform) {
     QPen gridPen(QColor(50, 52, 71), 1.0); QPen axisXPen(QColor("#F92672"), 1.5); QPen axisYPen(QColor("#66D9EF"), 1.5);
     painter.save(); painter.setTransform(transform);
@@ -350,4 +322,4 @@ void Viewport::rotateLeft() { m_camera->rotateLeft(); }
 void Viewport::rotateRight() { m_camera->rotateRight(); }
 void Viewport::wheelEvent(QWheelEvent *event) { double factor = 1.0 + (event->angleDelta().y() / 8.0) / 100.0; m_camera->applyZoom(factor, event->position().toPoint()); }
 void Viewport::resizeEvent(QResizeEvent *event) { m_camera->setCanvasSize(event->size()); }
-void Viewport::zoomToExtents() { /* Logic skipped for brevity */ }
+void Viewport::zoomToExtents() { }

@@ -59,7 +59,6 @@ void CadWindow::createConnections() {
     connect(m_viewportPanel, &Viewport::objectCreated, this, &CadWindow::onObjectCreateRequested);
     connect(m_controlPanel, &Control::primitiveTypeSelected, m_viewportPanel, &Viewport::setActiveTool);
 
-    // Новые коннекты для привязок
     connect(m_controlPanel, &Control::gridSnapToggled, m_viewportPanel, &Viewport::setGridSnap);
     connect(m_controlPanel, &Control::objectSnapToggled, m_viewportPanel, &Viewport::setObjectSnap);
 
@@ -84,6 +83,7 @@ void CadWindow::onPrimitiveTypeSelected(PrimitiveType type, int methodIndex) {
 }
 
 void CadWindow::onObjectCreateRequested(Object* obj) {
+    m_propertiesPanel->applyCurrentStyleTo(obj);
     m_scene->addPrimitive(std::unique_ptr<Object>(obj));
     m_viewportPanel->update();
     emit sceneChanged(m_scene);
