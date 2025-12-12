@@ -12,6 +12,7 @@ class QDoubleSpinBox;
 class QComboBox;
 class QButtonGroup;
 class QListWidget;
+class QCheckBox; // New
 class Scene;
 class Object;
 
@@ -62,20 +63,21 @@ signals:
     void objectsSelected(const std::vector<Object*>& selectedObjects);
     void deleteRequested();
 
-    // ИЗМЕНЕНО: Добавлен index для выбора конкретного способа построения
+    // Новые сигналы для привязок
+    void gridSnapToggled(bool enabled);
+    void objectSnapToggled(bool enabled);
+
     void primitiveTypeSelected(PrimitiveType type, int methodIndex);
 
 private slots:
     void onCartesianClicked();
     void onPolarClicked();
     void onSelectionChanged();
-
-    // ИЗМЕНЕНО: Слот теперь принимает и индекс
     void onPrimitiveToolClicked(int id);
 
 private:
     QWidget* createVariantPopup(LongPressButton* mainBtn,
-                                const std::vector<std::pair<QString, int>>& variants, // int - это subMethodIndex
+                                const std::vector<std::pair<QString, int>>& variants,
                                 PrimitiveType type);
 
     QSpinBox* m_gridStepSpinBox;
@@ -83,12 +85,15 @@ private:
     QComboBox* m_angleUnitComboBox;
     QToolButton* m_cartesianBtn;
     QToolButton* m_polarBtn;
+
+    // Новые чекбоксы
+    QCheckBox* m_gridSnapCheck;
+    QCheckBox* m_objSnapCheck;
+
     QListWidget* m_objectListWidget;
     QPushButton* m_deleteBtn;
 
     QButtonGroup* m_primitiveToolsGroup;
     bool m_updatingSelection = false;
-
-    // Храним текущий выбранный под-метод для каждого типа, чтобы при повторном клике восстанавливать его
     std::map<PrimitiveType, int> m_activeSubMethods;
 };

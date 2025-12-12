@@ -5,6 +5,7 @@
 #include <memory>
 #include <vector>
 #include "Enums.h"
+#include "Tools.h"
 
 class Scene;
 class Draw;
@@ -14,8 +15,8 @@ class Object;
 class Camera;
 class ContextMenu;
 class QRubberBand;
+class Snapper;
 
-// Виджет, отвечающий за отрисовку 2D-сцены, сетки, навигацию и обработку мыши.
 class Viewport : public QWidget
 {
     Q_OBJECT
@@ -29,16 +30,20 @@ public:
     void setGridStep(int step);
     void setZoomStep(double step);
 
+    void setActiveTool(PrimitiveType type, int subMethod);
+    void resetTool();
+
     QPointF worldToScreen(const QPointF& worldPos) const;
     QPointF screenToWorld(const QPointF& screenPos) const;
-    QPointF getSnappedPoint(const QPointF& mousePos) const;
 
 public slots:
     void update();
     void setCoordinateSystem(CoordinateSystemType type);
-
-    // Теперь принимает список, или сбрасывает выделение
     void setSelectedObjects(const std::vector<Object*>& objs);
+
+    // Слоты для привязок
+    void setGridSnap(bool enabled);
+    void setObjectSnap(bool enabled);
 
     void zoomIn();
     void zoomOut();
@@ -47,8 +52,8 @@ public slots:
     void rotateRight();
 
 signals:
-    // Сигнал, что выделение изменилось (передаем список)
     void selectionChanged(const std::vector<Object*>& selectedObjects);
+    void objectCreated(Object* obj);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -69,26 +74,30 @@ private:
     double calculateDynamicGridStep() const;
     QRect getGizmoRect() const;
 
-    // Находит объекты внутри экранного прямоугольника
+    // Реализация выделения рамкой
     std::vector<Object*> pickObjects(const QRect& screenRect);
 
     Scene* m_scene = nullptr;
     const std::map<PrimitiveType, std::unique_ptr<Draw>>* m_drawingStrategies = nullptr;
-
-    // Список выделенных объектов
     std::vector<Object*> m_selectedObjects;
 
     Camera* m_camera;
     ContextMenu* m_contextMenu;
+    std::unique_ptr<Snapper> m_snapper;
+
+    std::unique_ptr<Tool> m_currentTool;
+    PrimitiveType m_activeToolType = PrimitiveType::Generic;
 
     int m_gridStep = 50;
     double m_zoomStep = 1.25;
 
-    // Навигация
+    // Состояние привязок
+    bool m_gridSnapEnabled = false;
+    bool m_objectSnapEnabled = true;
+
     QPoint m_lastPanPos;
     bool m_isPanning = false;
 
-    // Выделение рамкой
     QRubberBand* m_rubberBand;
     QPoint m_rubberBandOrigin;
     bool m_isSelecting = false;

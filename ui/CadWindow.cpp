@@ -47,20 +47,21 @@ void CadWindow::createConnections() {
     connect(m_controlPanel, &Control::gridStepChanged, m_viewportPanel, &Viewport::setGridStep);
     connect(m_controlPanel, &Control::zoomStepChanged, m_viewportPanel, &Viewport::setZoomStep);
     connect(m_controlPanel, &Control::angleUnitChanged, this, &CadWindow::onAngleUnitChanged);
-
-    // ВАЖНО: передача системы координат в Properties для смены лейблов
     connect(m_controlPanel, &Control::coordinateSystemChanged, m_viewportPanel, &Viewport::setCoordinateSystem);
     connect(m_controlPanel, &Control::coordinateSystemChanged, m_propertiesPanel, &Properties::setCoordinateSystem);
-
     connect(m_controlPanel, &Control::primitiveTypeSelected, this, &CadWindow::onPrimitiveTypeSelected);
-
     connect(m_propertiesPanel, &Properties::objectCreateRequested, this, &CadWindow::onObjectCreateRequested);
     connect(m_propertiesPanel, &Properties::objectsModified, this, &CadWindow::onObjectsModified);
-
     connect(m_viewportPanel, &Viewport::selectionChanged, this, &CadWindow::onObjectsSelected);
     connect(m_controlPanel, &Control::objectsSelected, this, &CadWindow::onObjectsSelectedFromList);
     connect(this, &CadWindow::sceneChanged, m_controlPanel, &Control::updateObjectList);
     connect(m_controlPanel, &Control::deleteRequested, this, &CadWindow::onDeleteRequested);
+    connect(m_viewportPanel, &Viewport::objectCreated, this, &CadWindow::onObjectCreateRequested);
+    connect(m_controlPanel, &Control::primitiveTypeSelected, m_viewportPanel, &Viewport::setActiveTool);
+
+    // Новые коннекты для привязок
+    connect(m_controlPanel, &Control::gridSnapToggled, m_viewportPanel, &Viewport::setGridSnap);
+    connect(m_controlPanel, &Control::objectSnapToggled, m_viewportPanel, &Viewport::setObjectSnap);
 
     new QShortcut(QKeySequence(Qt::Key_Escape), this, SLOT(onEscapePressed()));
 }
@@ -75,7 +76,6 @@ void CadWindow::setupDrawingStrategies() {
     m_drawingStrategies[PrimitiveType::Spline] = std::make_unique<SplineDraw>();
 }
 
-// ИЗМЕНЕНО: Обработка выбора типа с учетом метода
 void CadWindow::onPrimitiveTypeSelected(PrimitiveType type, int methodIndex) {
     m_activePrimitiveType = type;
     if(m_selectedObjects.empty()) {
@@ -118,8 +118,8 @@ void CadWindow::onEscapePressed() {
     m_controlPanel->clearSelection();
     m_controlPanel->resetTools();
     m_activePrimitiveType = PrimitiveType::Generic;
-    // Сброс на generic
     m_propertiesPanel->showCreationPropertiesFor(PrimitiveType::Generic, 0);
+    m_viewportPanel->resetTool();
 }
 
 void CadWindow::onGridStepChanged(int step) { m_viewportPanel->setGridStep(step); }

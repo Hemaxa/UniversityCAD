@@ -10,7 +10,9 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
-add_executable(UniversityCAD)
+add_executable(UniversityCAD
+    core/Snapper.h core/Snapper.cpp
+    core/Tools.h core/Tools.cpp)
 
 target_sources (UniversityCAD PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Main.cpp

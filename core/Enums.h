@@ -25,13 +25,28 @@ enum class AngleUnit {
     Radians
 };
 
-// Типы линий.
+// Типы линий (ГОСТ 2.303-68).
 enum class LineStyleType {
-    Solid,
-    SolidWavy,
-    SolidZigZag,
-    Dashed,
-    DashDot,
-    DashDotDot,
-    Custom
+    SolidMain,          // Сплошная толстая (основная)
+    SolidThin,          // Сплошная тонкая
+    SolidWavy,          // Сплошная волнистая
+    SolidZigZag,        // Сплошная с изломами
+    Dashed,             // Штриховая
+    DashDotThin,        // Штрихпунктирная тонкая
+    DashDotThick,       // Штрихпунктирная утолщенная
+    DashDotDot,         // Штрихпунктирная с двумя точками
+    Custom              // Пользовательская
+};
+
+// Типы привязок.
+enum class SnapType {
+    None,
+    Endpoint,
+    Midpoint,
+    Center,
+    Intersection,
+    Perpendicular,
+    Tangent,
+    Quadrant,
+    Nearest
 };
