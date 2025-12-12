@@ -27,22 +27,15 @@ public:
 private slots:
     void onGridStepChanged(int step);
     void onAngleUnitChanged(AngleUnit unit);
-    void onPrimitiveTypeSelected(PrimitiveType type);
+
+    // ИЗМЕНЕНО: Принимаем methodIndex
+    void onPrimitiveTypeSelected(PrimitiveType type, int methodIndex);
 
     void onDeleteRequested();
-
-    // Слот при выборе во Viewport
     void onObjectsSelected(const std::vector<Object*>& selectedObjects);
-
-    // Слот при выборе в Control (Списке)
     void onObjectsSelectedFromList(const std::vector<Object*>& selectedObjects);
-
     void onObjectsModified(const std::vector<Object*>& objs);
-
-    // ИСПРАВЛЕНО: Принимаем сырой указатель (Object*), чтобы обойти ограничения MOC на unique_ptr
     void onObjectCreateRequested(Object* obj);
-
-    // Слот для кнопки Escape
     void onEscapePressed();
 
 signals:

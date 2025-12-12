@@ -22,19 +22,14 @@ class LongPressButton : public QToolButton {
     Q_OBJECT
 public:
     explicit LongPressButton(QWidget* parent = nullptr);
-
-    // Устанавливает виджет, который будет всплывать (контейнер с кнопками)
     void setPopupWidget(QWidget* popup);
 
 signals:
-    // Сигнал долгого нажатия (для открытия меню)
     void longPressActivated();
 
 protected:
     void mousePressEvent(QMouseEvent* e) override;
     void mouseReleaseEvent(QMouseEvent* e) override;
-
-    // ДОБАВЛЕНО: Для отрисовки треугольника
     void paintEvent(QPaintEvent* e) override;
 
 private slots:
@@ -46,7 +41,6 @@ private:
     bool m_isLongPressHandled = false;
 };
 
-// ... (Остальная часть класса Control без изменений)
 class Control : public QWidget
 {
     Q_OBJECT
@@ -67,17 +61,22 @@ signals:
     void zoomStepChanged(double step);
     void objectsSelected(const std::vector<Object*>& selectedObjects);
     void deleteRequested();
-    void primitiveTypeSelected(PrimitiveType type);
+
+    // ИЗМЕНЕНО: Добавлен index для выбора конкретного способа построения
+    void primitiveTypeSelected(PrimitiveType type, int methodIndex);
 
 private slots:
     void onCartesianClicked();
     void onPolarClicked();
     void onSelectionChanged();
-    void onPrimitiveToolToggled(bool checked, PrimitiveType type);
+
+    // ИЗМЕНЕНО: Слот теперь принимает и индекс
+    void onPrimitiveToolClicked(int id);
 
 private:
     QWidget* createVariantPopup(LongPressButton* mainBtn,
-                                const std::vector<std::pair<QString, PrimitiveType>>& variants);
+                                const std::vector<std::pair<QString, int>>& variants, // int - это subMethodIndex
+                                PrimitiveType type);
 
     QSpinBox* m_gridStepSpinBox;
     QDoubleSpinBox* m_zoomStepSpinBox;
@@ -89,4 +88,7 @@ private:
 
     QButtonGroup* m_primitiveToolsGroup;
     bool m_updatingSelection = false;
+
+    // Храним текущий выбранный под-метод для каждого типа, чтобы при повторном клике восстанавливать его
+    std::map<PrimitiveType, int> m_activeSubMethods;
 };

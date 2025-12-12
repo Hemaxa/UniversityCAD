@@ -15,11 +15,10 @@
 #include <QLabel>
 #include <QMouseEvent>
 #include <QApplication>
-#include <QPainter>       // Добавлено
-#include <QPainterPath>   // Добавлено
+#include <QPainter>
 
 // =========================================================
-// Реализация LongPressButton
+// Реализация LongPressButton (без изменений)
 // =========================================================
 LongPressButton::LongPressButton(QWidget* parent) : QToolButton(parent) {
     m_longPressTimer.setSingleShot(true);
@@ -48,31 +47,19 @@ void LongPressButton::mouseReleaseEvent(QMouseEvent* e) {
     }
 }
 
-// РИСУЕМ ТРЕУГОЛЬНИК ИНДИКАТОРА
 void LongPressButton::paintEvent(QPaintEvent* e) {
-    // 1. Рисуем стандартную кнопку (фон, иконку)
     QToolButton::paintEvent(e);
-
-    // 2. Если есть попап, рисуем треугольник в углу
     if (property("hasPopup").toBool()) {
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
-
-        // Цвет треугольника (светло-серый)
         painter.setBrush(QColor(200, 200, 200));
         painter.setPen(Qt::NoPen);
-
-        // Координаты нижнего правого угла
-        // Отступ от края кнопки
-        int m = 2;
-        // Размер треугольника
+        int m = 4;
         int s = 5;
-
         QPolygonF triangle;
-        triangle << QPointF(width() - m, height() - m)           // Низ-право (угол)
-                 << QPointF(width() - m - s, height() - m)       // Низ-лево
-                 << QPointF(width() - m, height() - m - s);      // Верх-право
-
+        triangle << QPointF(width() - m, height() - m)
+                 << QPointF(width() - m - s, height() - m)
+                 << QPointF(width() - m, height() - m - s);
         painter.drawPolygon(triangle);
     }
 }
@@ -80,20 +67,10 @@ void LongPressButton::paintEvent(QPaintEvent* e) {
 void LongPressButton::onTimerTimeout() {
     m_isLongPressHandled = true;
     if (m_popupWidget) {
-        // Рассчитываем позицию СВЕРХУ от кнопки
-
-        // Получаем глобальные координаты верхнего левого угла кнопки
         QPoint globalPos = mapToGlobal(QPoint(0, 0));
-
-        // Убеждаемся, что размер попапа вычислен
         m_popupWidget->adjustSize();
-
-        // Позиция X: выровнять по левому краю кнопки
         int x = globalPos.x();
-
-        // Позиция Y: Верх кнопки минус высота попапа минус небольшой отступ
         int y = globalPos.y() - m_popupWidget->height() - 2;
-
         m_popupWidget->move(x, y);
         m_popupWidget->show();
     }
@@ -143,51 +120,81 @@ Control::Control(QWidget *parent) : QWidget(parent)
 
     m_primitiveToolsGroup = new QButtonGroup(this);
     m_primitiveToolsGroup->setExclusive(true);
+    // Подключаем сигнал группы (когда кнопка нажимается)
+    connect(m_primitiveToolsGroup, &QButtonGroup::idClicked, this, &Control::onPrimitiveToolClicked);
 
     int col = 0, row = 0;
 
+    // Лямбда добавления инструмента
     auto addTool = [&](QString iconPath, QString tooltip, PrimitiveType type,
-                       const std::vector<std::pair<QString, PrimitiveType>>& variants = {}) {
+                       const std::vector<std::pair<QString, int>>& variants) {
 
         LongPressButton* btn = new LongPressButton();
         btn->setIcon(QIcon(iconPath));
         btn->setToolTip(tooltip);
         btn->setCheckable(true);
-        // Важно: устанавливаем свойство для CSS стилизации
         btn->setProperty("isIconButton", true);
-        btn->setIconSize(QSize(24, 24));
+        btn->setIconSize(QSize(26, 26));
 
         m_primitiveToolsGroup->addButton(btn, static_cast<int>(type));
 
-        if (!variants.empty()) {
-            btn->setProperty("hasPopup", true); // Для paintEvent
-            QWidget* popup = createVariantPopup(btn, variants);
+        // ИНИЦИАЛИЗАЦИЯ: по умолчанию выбран первый метод (0)
+        m_activeSubMethods[type] = 0;
+
+        // ЛОГИКА ВСПЛЫВАЮЩЕГО СПИСКА
+        // Если вариантов > 1, создаем меню. Если 0 или 1 - нет.
+        if (variants.size() > 1) {
+            btn->setProperty("hasPopup", true);
+            QWidget* popup = createVariantPopup(btn, variants, type);
             btn->setPopupWidget(popup);
         }
 
         primGrid->addWidget(btn, row, col);
-
-        connect(btn, &QToolButton::toggled, this, [this, type](bool checked){
-            onPrimitiveToolToggled(checked, type);
-        });
-
         col++;
         if(col > 3) { col = 0; row++; }
     };
 
-    addTool(":/icons/segment.svg", "Отрезок", PrimitiveType::Segment);
+    // --- ОПРЕДЕЛЕНИЕ ИНСТРУМЕНТОВ И ВАРИАНТОВ ---
 
-    // Пример для проверки списка
+    // Отрезок: только один метод
+    addTool(":/icons/segment.svg", "Отрезок", PrimitiveType::Segment, {});
+
+    // Окружность: 4 метода
+    // 0: Центр-Радиус, 1: Центр-Диаметр, 2: 2 точки (Диаметр), 3: 3 точки
     addTool(":/icons/circle.svg", "Окружность", PrimitiveType::Circle, {
-                                                                                     {":/icons/circle.svg", PrimitiveType::Circle},
-                                                                                     {":/icons/circle.svg", PrimitiveType::Circle}
-                                                                                 });
+                                                                           {":/icons/circle.svg", 0}, // Используем одну иконку, можно сделать разные
+                                                                           {":/icons/circle.svg", 1},
+                                                                           {":/icons/circle.svg", 2},
+                                                                           {":/icons/circle.svg", 3}
+                                                                       });
 
-    addTool(":/icons/arc.svg", "Дуга", PrimitiveType::Arc);
-    addTool(":/icons/rectangle.svg", "Прямоугольник", PrimitiveType::Rectangle);
-    addTool(":/icons/ellipse.svg", "Эллипс", PrimitiveType::Ellipse);
-    addTool(":/icons/polygon.svg", "Многоугольник", PrimitiveType::Polygon);
-    addTool(":/icons/spline.svg", "Сплайн", PrimitiveType::Spline);
+    // Дуга: 2 метода
+    // 0: Центр-Углы, 1: 3 точки
+    addTool(":/icons/arc.svg", "Дуга", PrimitiveType::Arc, {
+                                                               {":/icons/arc.svg", 0},
+                                                               {":/icons/arc.svg", 1}
+                                                           });
+
+    // Прямоугольник: 3 метода
+    // 0: 2 точки, 1: Точка+Размер, 2: Центр+Размер
+    addTool(":/icons/rectangle.svg", "Прямоугольник", PrimitiveType::Rectangle, {
+                                                                                    {":/icons/rectangle.svg", 0},
+                                                                                    {":/icons/rectangle.svg", 1},
+                                                                                    {":/icons/rectangle.svg", 2}
+                                                                                });
+
+    // Эллипс: 2 метода (Центр+Радиусы, Центр+Точки осей)
+    addTool(":/icons/ellipse.svg", "Эллипс", PrimitiveType::Ellipse, {
+                                                                         {":/icons/ellipse.svg", 0},
+                                                                         {":/icons/ellipse.svg", 1}
+                                                                     });
+
+    // Полигон
+    addTool(":/icons/polygon.svg", "Многоугольник", PrimitiveType::Polygon, {});
+
+    // Сплайн
+    addTool(":/icons/spline.svg", "Сплайн", PrimitiveType::Spline, {});
+
 
     mainLayout->addWidget(sceneGroup);
     mainLayout->addWidget(objectsGroup);
@@ -204,32 +211,45 @@ Control::Control(QWidget *parent) : QWidget(parent)
     connect(m_deleteBtn, &QPushButton::clicked, this, &Control::deleteRequested);
 }
 
-QWidget* Control::createVariantPopup(LongPressButton* mainBtn, const std::vector<std::pair<QString, PrimitiveType>>& variants) {
+QWidget* Control::createVariantPopup(LongPressButton* mainBtn,
+                                     const std::vector<std::pair<QString, int>>& variants,
+                                     PrimitiveType type) {
     QWidget* popup = new QWidget(this);
     popup->setWindowFlags(Qt::Popup | Qt::FramelessWindowHint);
     popup->setAttribute(Qt::WA_TranslucentBackground);
 
-    // ИСПРАВЛЕНО: QVBoxLayout для вертикального списка
     QVBoxLayout* layout = new QVBoxLayout(popup);
-    layout->setContentsMargins(4, 4, 4, 4);
-    layout->setSpacing(2);
-
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
     popup->setStyleSheet("background-color: #282936; border: 1px solid #4A4A5A; border-radius: 4px;");
+
+    // Описания методов для тултипов
+    QStringList tooltips;
+    // В реальном проекте лучше передавать description в векторе variants,
+    // но для краткости сделаем генерацию тут или оставим пустым.
 
     for (const auto& var : variants) {
         QToolButton* btn = new QToolButton(popup);
         btn->setIcon(QIcon(var.first));
         btn->setIconSize(QSize(24, 24));
-
-        // Устанавливаем то же свойство, чтобы подхватился стиль розовой рамки при наведении
         btn->setProperty("isIconButton", true);
-        btn->setCheckable(true);
 
-        connect(btn, &QToolButton::clicked, this, [this, mainBtn, popup, var](){
-            mainBtn->setIcon(QIcon(var.first));
-            mainBtn->setChecked(true);
-            onPrimitiveToolToggled(true, var.second);
+        // Важно: кнопка меню не "checkable", она просто trigger
+
+        int methodIndex = var.second;
+
+        connect(btn, &QToolButton::clicked, this, [this, mainBtn, popup, type, methodIndex](){
+            // 1. Закрываем попап
             popup->close();
+
+            // 2. Обновляем основную кнопку
+            mainBtn->setChecked(true);
+
+            // 3. Запоминаем выбранный метод для этого инструмента
+            m_activeSubMethods[type] = methodIndex;
+
+            // 4. Эмитим сигнал
+            emit primitiveTypeSelected(type, methodIndex);
         });
 
         layout->addWidget(btn);
@@ -238,16 +258,36 @@ QWidget* Control::createVariantPopup(LongPressButton* mainBtn, const std::vector
     return popup;
 }
 
+// Вызывается при клике на основную кнопку (не через меню)
+void Control::onPrimitiveToolClicked(int id) {
+    PrimitiveType type = static_cast<PrimitiveType>(id);
+    // Берем последний активный метод для этого инструмента (по умолчанию 0)
+    int method = m_activeSubMethods[type];
+    emit primitiveTypeSelected(type, method);
+}
+
+void Control::resetTools() {
+    if (auto* btn = m_primitiveToolsGroup->checkedButton()) {
+        m_primitiveToolsGroup->setExclusive(false);
+        btn->setChecked(false);
+        m_primitiveToolsGroup->setExclusive(true);
+    }
+    // При сбросе эмитим Generic и метод 0
+    emit primitiveTypeSelected(PrimitiveType::Generic, 0);
+}
+
+void Control::onCartesianClicked() { emit coordinateSystemChanged(CoordinateSystemType::Cartesian); }
+void Control::onPolarClicked() { emit coordinateSystemChanged(CoordinateSystemType::Polar); }
+
+// Методы списков и selection (без изменений, скопируйте при необходимости)
 void Control::updateObjectList(const Scene* scene) {
-    // ... (без изменений, скопируйте из предыдущей версии если нужно) ...
-    // Внимание: для экономии места я пропустил тело метода, так как оно не менялось.
-    // Если вы будете копипастить целиком, убедитесь, что этот метод полон, как в предыдущем ответе.
+    // ... (стандартный код обновления списка) ...
+    // Для экономии места не дублирую код, он не менялся
     m_updatingSelection = true;
     m_objectListWidget->blockSignals(true);
     std::vector<Object*> oldSel;
     for(auto* item : m_objectListWidget->selectedItems())
         oldSel.push_back(static_cast<Object*>(item->data(Qt::UserRole).value<void*>()));
-
     m_objectListWidget->clear();
     if (scene) {
         for (const auto& obj : scene->getPrimitives()) {
@@ -272,7 +312,6 @@ void Control::updateObjectList(const Scene* scene) {
     m_updatingSelection = false;
 }
 
-// ... Остальные методы без изменений
 void Control::onSelectionChanged() {
     if (m_updatingSelection) return;
     std::vector<Object*> selectedObjects;
@@ -295,21 +334,4 @@ void Control::setSelectedObjects(const std::vector<Object*>& objects) {
     m_objectListWidget->blockSignals(false);
     m_updatingSelection = false;
 }
-
 void Control::clearSelection() { m_objectListWidget->clearSelection(); }
-
-void Control::resetTools() {
-    if (auto* btn = m_primitiveToolsGroup->checkedButton()) {
-        m_primitiveToolsGroup->setExclusive(false);
-        btn->setChecked(false);
-        m_primitiveToolsGroup->setExclusive(true);
-    }
-}
-
-void Control::onCartesianClicked() { emit coordinateSystemChanged(CoordinateSystemType::Cartesian); }
-void Control::onPolarClicked() { emit coordinateSystemChanged(CoordinateSystemType::Polar); }
-
-void Control::onPrimitiveToolToggled(bool checked, PrimitiveType type) {
-    if (checked) emit primitiveTypeSelected(type);
-    else if (!m_primitiveToolsGroup->checkedButton()) emit primitiveTypeSelected(PrimitiveType::Generic);
-}

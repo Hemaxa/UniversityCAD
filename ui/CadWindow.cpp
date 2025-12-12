@@ -44,26 +44,24 @@ void CadWindow::setupUi() {
 }
 
 void CadWindow::createConnections() {
-    // Control -> Viewport
     connect(m_controlPanel, &Control::gridStepChanged, m_viewportPanel, &Viewport::setGridStep);
     connect(m_controlPanel, &Control::zoomStepChanged, m_viewportPanel, &Viewport::setZoomStep);
     connect(m_controlPanel, &Control::angleUnitChanged, this, &CadWindow::onAngleUnitChanged);
-    connect(m_controlPanel, &Control::coordinateSystemChanged, m_viewportPanel, &Viewport::setCoordinateSystem);
 
-    // Control -> Window
+    // ВАЖНО: передача системы координат в Properties для смены лейблов
+    connect(m_controlPanel, &Control::coordinateSystemChanged, m_viewportPanel, &Viewport::setCoordinateSystem);
+    connect(m_controlPanel, &Control::coordinateSystemChanged, m_propertiesPanel, &Properties::setCoordinateSystem);
+
     connect(m_controlPanel, &Control::primitiveTypeSelected, this, &CadWindow::onPrimitiveTypeSelected);
 
-    // Properties -> Scene (Creation)
     connect(m_propertiesPanel, &Properties::objectCreateRequested, this, &CadWindow::onObjectCreateRequested);
     connect(m_propertiesPanel, &Properties::objectsModified, this, &CadWindow::onObjectsModified);
 
-    // Selection Sync
     connect(m_viewportPanel, &Viewport::selectionChanged, this, &CadWindow::onObjectsSelected);
     connect(m_controlPanel, &Control::objectsSelected, this, &CadWindow::onObjectsSelectedFromList);
     connect(this, &CadWindow::sceneChanged, m_controlPanel, &Control::updateObjectList);
     connect(m_controlPanel, &Control::deleteRequested, this, &CadWindow::onDeleteRequested);
 
-    // Shortcuts
     new QShortcut(QKeySequence(Qt::Key_Escape), this, SLOT(onEscapePressed()));
 }
 
@@ -77,18 +75,16 @@ void CadWindow::setupDrawingStrategies() {
     m_drawingStrategies[PrimitiveType::Spline] = std::make_unique<SplineDraw>();
 }
 
-void CadWindow::onPrimitiveTypeSelected(PrimitiveType type) {
+// ИЗМЕНЕНО: Обработка выбора типа с учетом метода
+void CadWindow::onPrimitiveTypeSelected(PrimitiveType type, int methodIndex) {
     m_activePrimitiveType = type;
     if(m_selectedObjects.empty()) {
-        m_propertiesPanel->showCreationPropertiesFor(type);
+        m_propertiesPanel->showCreationPropertiesFor(type, methodIndex);
     }
 }
 
-// ИСПРАВЛЕНО: Слот принимает сырой указатель (Object*)
 void CadWindow::onObjectCreateRequested(Object* obj) {
-    // Немедленно берем владение, оборачивая в unique_ptr
     m_scene->addPrimitive(std::unique_ptr<Object>(obj));
-
     m_viewportPanel->update();
     emit sceneChanged(m_scene);
 }
@@ -122,7 +118,8 @@ void CadWindow::onEscapePressed() {
     m_controlPanel->clearSelection();
     m_controlPanel->resetTools();
     m_activePrimitiveType = PrimitiveType::Generic;
-    m_propertiesPanel->showCreationPropertiesFor(PrimitiveType::Generic);
+    // Сброс на generic
+    m_propertiesPanel->showCreationPropertiesFor(PrimitiveType::Generic, 0);
 }
 
 void CadWindow::onGridStepChanged(int step) { m_viewportPanel->setGridStep(step); }
