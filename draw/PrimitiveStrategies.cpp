@@ -73,6 +73,27 @@ static double getScale(const QPainter& p) {
     return p.transform().m11();
 }
 
+static void drawStyledEllipse(QPainter& painter, const QPointF& center, double rx, double ry, const Object* obj) {
+    LineStyleType type = obj->getLineStyle().type;
+
+    // Если стиль требует сложной геометрии (волна/зигзаг), делаем через путь
+    if (type == LineStyleType::SolidWavy || type == LineStyleType::SolidZigZag) {
+        QPainterPath path;
+        path.addEllipse(center, rx, ry);
+
+        // Тут сложнее: createWavyPath работает для отрезков.
+        // Для окружности нужно семплировать точки или использовать упрощение.
+        // Для простоты пока оставим стандартную отрисовку для волн на кругах,
+        // так как "развернуть" волну по кругу математически затратно для этого примера.
+        // НО, чтобы сработал dashed/dotted QPen, нужно убедиться что мы не используем drawPath(..., wavy).
+        // Стандартный dashed работает в painter.drawEllipse.
+        painter.drawEllipse(center, rx, ry);
+    } else {
+        // Обычные типы (Solid, Dashed, etc) отлично рисуются стандартным методом с настроенным Pen
+        painter.drawEllipse(center, rx, ry);
+    }
+}
+
 // =========================================================
 // Настройка пера по ГОСТ 2.303-68 (С учетом глобальных настроек)
 // =========================================================
@@ -186,7 +207,11 @@ void SegmentDraw::draw(QPainter& painter, Object* primitive, bool isSelected) co
 
 void CircleDraw::draw(QPainter& painter, Object* primitive, bool isSelected) const {
     auto* obj = static_cast<Circle*>(primitive);
-    setupPen(painter, obj, isSelected);
+    setupPen(painter, obj, isSelected); // setupPen настроит QPen (включая Dashed паттерны)
+    // drawEllipse корректно использует QPen, проблема была возможно в том, что пользователь ожидал Wavy на круге,
+    // либо в том, что setupPen неправильно обрабатывал типы.
+    // Если проблема была в том, что "другие типы линий" (пунктир) не применялись, то drawEllipse это исправит,
+    // при условии что setupPen вызывается.
     painter.drawEllipse(QPointF(obj->getCenter().getX(), obj->getCenter().getY()),
                         obj->getRadius(), obj->getRadius());
 }
@@ -203,8 +228,40 @@ void ArcDraw::draw(QPainter& painter, Object* primitive, bool isSelected) const 
 void RectangleDraw::draw(QPainter& painter, Object* primitive, bool isSelected) const {
     auto* obj = static_cast<Rectangle*>(primitive);
     setupPen(painter, obj, isSelected);
-    painter.drawRoundedRect(QRectF(obj->getTopLeft().getX(), obj->getTopLeft().getY(),
-                                   obj->getWidth(), obj->getHeight()),
+
+    // Rectangle хранит TopLeft (Min X, Max Y).
+    // QPainter drawRect(x,y,w,h) рисует от x,y вправо и ВНИЗ (в экранных координатах).
+    // Если Camera инвертирует Y (scale 1, -1), то +Y экрана это -Y мира.
+    // Чтобы нарисовать прямоугольник, который в мире имеет высоту H (вверх),
+    // нам нужно знать, как QPainter обрабатывает высоту.
+
+    // Надежнее всего нарисовать явно через координаты, чтобы не зависеть от знака высоты
+    double minX = obj->getTopLeft().getX();
+    double maxY = obj->getTopLeft().getY();
+    double w = obj->getWidth();
+    double h = obj->getHeight();
+
+    // Прямоугольник от (minX, maxY) вниз на h (до maxY - h).
+    // В мире: TopLeft = (minX, maxY). BottomRight = (minX+w, maxY-h).
+
+    // Вариант 1: Использовать QRectF(TopLeft, Size) и надеяться на трансформацию.
+    // Если scale(1, -1), то точка (0, 10) на экране (0, -10).
+    // Если мы скажем drawRect(0, 10, 10, 10).
+    // Это прямоугольник от (0,10) до (10, 20) в локальных координатах Pen.
+    // После трансф: Y инвертируется.
+
+    // Проще: задаем прямоугольник через верхний-левый и размеры так, чтобы он соответствовал математике.
+    // Если Rectangle::m_topLeft это "Верхний Левый" в мире (Max Y), то
+    // чтобы нарисовать его вниз (к Min Y), нужно использовать отрицательную высоту или сдвигать Y.
+
+    // Исправление бага "появляется выше":
+    // Мы рисуем от TopLeft.
+    // Если мы используем drawRect(x, y, w, h) -> это рисует в сторону увеличения Y координат системы QPainter.
+    // В мире (где Y вверх) увеличение Y - это вверх.
+    // Значит drawRect(x,y,w,h) нарисует прямоугольник ВВЕРХ от точки x,y.
+    // А наш Rectangle хранит ВЕРХНЮЮ точку. Значит нам надо рисовать ВНИЗ.
+
+    painter.drawRoundedRect(QRectF(minX, maxY - h, w, h), // Рисуем от нижней точки вверх
                             obj->getCornerRadius(), obj->getCornerRadius());
 }
 

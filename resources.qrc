@@ -20,5 +20,6 @@
         <file>icons/rectangle-2.svg</file>
         <file>icons/rectangle-3.svg</file>
         <file>icons/spline.svg</file>
+        <file>icons/settings.svg</file>
     </qresource>
 </RCC>

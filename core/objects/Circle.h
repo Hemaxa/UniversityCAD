@@ -15,6 +15,10 @@ public:
 
     std::vector<SnapPoint> getSnapPoints() const override;
 
+    // --- Добавленные объявления ---
+    Point getClosestPoint(const Point& p) const override;
+    std::vector<Point> getTangentPoints(const Point& p) const override;
+
 private:
     Point m_center;
     double m_radius;

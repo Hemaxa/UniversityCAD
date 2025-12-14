@@ -1,4 +1,5 @@
 #include "Segment.h"
+#include "MathUtils.h"
 
 Segment::Segment(const Point& start, const Point& end) : m_start(start), m_end(end) {}
 
@@ -15,4 +16,27 @@ std::vector<SnapPoint> Segment::getSnapPoints() const {
     snaps.push_back({Point((m_start.getX() + m_end.getX()) / 2,
                            (m_start.getY() + m_end.getY()) / 2), SnapType::Midpoint});
     return snaps;
+}
+
+Point Segment::getClosestPoint(const Point& p) const {
+    return MathUtils::projectPointOnSegment(p, m_start, m_end);
+}
+
+std::optional<Point> Segment::getPerpendicularPoint(const Point& p) const {
+    Point proj = MathUtils::projectPointOnLine(p, m_start, m_end);
+    // Проверяем, падает ли перпендикуляр на сам отрезок
+    // (в классическом CAD перпендикуляр часто работает и к продолжению линии,
+    // но обычно привязка показывается только если попадаем в пределы отрезка)
+
+    // Проверка попадания в пределы:
+    double dSq = MathUtils::distSq(m_start, m_end);
+    if (dSq < 1e-9) return std::nullopt; // Отрезок вырожден в точку
+
+    double t = ((proj.getX() - m_start.getX()) * (m_end.getX() - m_start.getX()) +
+                (proj.getY() - m_start.getY()) * (m_end.getY() - m_start.getY())) / dSq;
+
+    if (t >= 0.0 && t <= 1.0) {
+        return proj;
+    }
+    return std::nullopt;
 }

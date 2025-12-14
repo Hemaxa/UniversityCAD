@@ -24,7 +24,8 @@ public:
     void setGridSnap(bool enabled, int step);
     void setObjectSnap(bool enabled);
 
-    SnapResult snap(const Point& mouseWorldPos, double scaleFactor) const;
+    // prevPoint - точка, от которой строим (начало линии), нужна для Tangent/Perpendicular
+    SnapResult snap(const Point& mouseWorldPos, double scaleFactor, const std::optional<Point>& prevPoint = std::nullopt) const;
 
 private:
     const Scene* m_scene;

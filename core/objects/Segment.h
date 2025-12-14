@@ -16,6 +16,10 @@ public:
 
     std::vector<SnapPoint> getSnapPoints() const override;
 
+    // --- Добавленные объявления для привязок ---
+    Point getClosestPoint(const Point& p) const override;
+    std::optional<Point> getPerpendicularPoint(const Point& p) const override;
+
 private:
     Point m_start;
     Point m_end;

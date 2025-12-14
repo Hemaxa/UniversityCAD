@@ -41,12 +41,12 @@ enum class LineStyleType {
 // Типы привязок.
 enum class SnapType {
     None,
-    Endpoint,
-    Midpoint,
-    Center,
-    Intersection,
-    Perpendicular,
-    Tangent,
-    Quadrant,
-    Nearest
+    Endpoint,       // Конечная точка
+    Midpoint,       // Середина
+    Center,         // Центр (окружности, дуги, многоугольника, прямоугольника)
+    Intersection,   // Пересечение
+    Perpendicular,  // Перпендикуляр (требует предыдущей точки)
+    Tangent,        // Касательная (требует предыдущей точки)
+    Quadrant,       // Квадрант (0, 90, 180, 270 градусов)
+    Nearest         // Ближайшая точка на объекте
 };

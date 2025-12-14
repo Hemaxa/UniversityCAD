@@ -1,25 +1,22 @@
 #pragma once
 
 #include "Enums.h"
-#include "Point.h" // Теперь мы можем включить Point.h, так как он не зависит от Object
+#include "Point.h"
 #include <QColor>
 #include <QString>
 #include <vector>
+#include <optional>
 
-// Точка привязки
 struct SnapPoint {
     Point p;
     SnapType type;
 };
 
-// Структура, описывающая стиль линии.
 struct LineStyle {
     LineStyleType type = LineStyleType::SolidMain;
     QString name = "Сплошная основная";
-
     double dashLength = 4.0;
     double gapLength = 2.0;
-
     bool isMain = true;
 };
 
@@ -39,8 +36,17 @@ public:
     virtual void setLineStyle(const LineStyle& style) { m_style = style; }
     virtual const LineStyle& getLineStyle() const { return m_style; }
 
-    // Виртуальный метод получения точек привязки
+    // Основные точки привязки (End, Mid, Center, Quadrant)
     virtual std::vector<SnapPoint> getSnapPoints() const { return {}; }
+
+    // Ближайшая точка на объекте (для привязки Nearest)
+    virtual Point getClosestPoint(const Point& p) const { return p; }
+
+    // Точки, образующие перпендикуляр из точки p к объекту
+    virtual std::optional<Point> getPerpendicularPoint(const Point& p) const { return std::nullopt; }
+
+    // Точки касания из точки p к объекту
+    virtual std::vector<Point> getTangentPoints(const Point& p) const { return {}; }
 
 private:
     QColor m_color = Qt::white;

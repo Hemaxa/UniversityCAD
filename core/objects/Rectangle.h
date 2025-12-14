@@ -21,6 +21,10 @@ public:
 
     std::vector<SnapPoint> getSnapPoints() const override;
 
+    // --- Добавленные объявления ---
+    Point getClosestPoint(const Point& p) const override;
+    // Можно также добавить getPerpendicularPoint, если нужно, но пока реализуем Nearest
+
 private:
     Point m_topLeft;
     double m_width;

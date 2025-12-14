@@ -1,5 +1,7 @@
 #include "Polygon.h"
+#include "MathUtils.h"
 #include <cmath>
+#include <vector>
 
 PolygonObj::PolygonObj(const Point& center, double radius, int sides, bool inscribed)
     : m_center(center), m_radius(radius), m_sides(sides), m_inscribed(inscribed) {}
@@ -28,8 +30,41 @@ std::vector<SnapPoint> PolygonObj::getSnapPoints() const {
 
     for (int i = 0; i < sides; ++i) {
         double angle = startAngle + i * step;
-        snaps.push_back({Point(m_center.getX() + r * std::cos(angle),
-                               m_center.getY() + r * std::sin(angle)), SnapType::Endpoint});
+        Point p(m_center.getX() + r * std::cos(angle),
+                m_center.getY() + r * std::sin(angle));
+        snaps.push_back({p, SnapType::Endpoint});
     }
     return snaps;
+}
+
+Point PolygonObj::getClosestPoint(const Point& p) const {
+    // Получаем вершины (повторяем логику getSnapPoints)
+    int sides = std::max(3, m_sides);
+    double step = 2 * M_PI / sides;
+    double startAngle = M_PI / 2;
+    double r = m_radius;
+    if (!m_inscribed) r = r / std::cos(M_PI / sides);
+
+    std::vector<Point> vertices;
+    for (int i = 0; i < sides; ++i) {
+        double angle = startAngle + i * step;
+        vertices.emplace_back(m_center.getX() + r * std::cos(angle),
+                              m_center.getY() + r * std::sin(angle));
+    }
+
+    // Ищем проекцию на ближайший сегмент
+    Point closestPoint = vertices[0];
+    double minDistSq = 1e15;
+
+    for (int i = 0; i < sides; ++i) {
+        Point p1 = vertices[i];
+        Point p2 = vertices[(i + 1) % sides];
+        Point proj = MathUtils::projectPointOnSegment(p, p1, p2);
+        double d = MathUtils::distSq(p, proj);
+        if (d < minDistSq) {
+            minDistSq = d;
+            closestPoint = proj;
+        }
+    }
+    return closestPoint;
 }
