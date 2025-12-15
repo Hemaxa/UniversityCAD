@@ -17,6 +17,8 @@ public:
     void setRadiusY(double r);
 
     std::vector<SnapPoint> getSnapPoints() const override;
+    Point getClosestPoint(const Point& p) const override;
+    std::vector<Point> getTangentPoints(const Point& p) const override;
 
 private:
     Point m_center;

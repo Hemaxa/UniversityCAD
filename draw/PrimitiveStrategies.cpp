@@ -9,8 +9,11 @@
 // Вспомогательные функции для создания путей (Волна, Зигзаг)
 // =========================================================
 
-static QPainterPath createWavyPath(const QPointF& start, const QPointF& end, double zoomFactor) {
-    QPainterPath path; path.moveTo(start);
+// Создание волнистой линии по ГОСТ - амплитуда и период в мировых координатах
+static QPainterPath createWavyPath(const QPointF& start, const QPointF& end) {
+    QPainterPath path;
+    path.moveTo(start);
+    
     double dx = end.x() - start.x();
     double dy = end.y() - start.y();
     double length = std::sqrt(dx * dx + dy * dy);
@@ -22,26 +25,29 @@ static QPainterPath createWavyPath(const QPointF& start, const QPointF& end, dou
     t.translate(start.x(), start.y());
     t.rotateRadians(angle);
 
-    double screenAmp = 3.0;
-    double screenPeriod = 10.0;
+    // Используем глобальные настройки для волнистой линии
+    const auto& wavy = GlobalSettings::instance().wavyParams;
+    double worldAmp = wavy.amplitude;
+    double worldPeriod = wavy.period;
 
-    // Амплитуда и период в мировых координатах, чтобы визуально размер сохранялся
-    double worldAmp = screenAmp / zoomFactor;
-    double worldPeriod = screenPeriod / zoomFactor;
-
-    int steps = static_cast<int>(length / (worldPeriod / 8.0));
-    if (steps < 2) steps = 2;
-
-    for (int i = 0; i <= steps; ++i) {
+    // Количество точек для плавной синусоиды
+    int steps = std::max(2, static_cast<int>(length / (worldPeriod / 16.0)));
+    
+    for (int i = 1; i <= steps; ++i) {
         double x = (double)i / steps * length;
-        double y = worldAmp * std::sin(x * 2 * M_PI / worldPeriod);
+        double y = worldAmp * std::sin(x * 2.0 * M_PI / worldPeriod);
         path.lineTo(t.map(QPointF(x, y)));
     }
+    
     return path;
 }
 
-static QPainterPath createZigZagPath(const QPointF& start, const QPointF& end, double zoomFactor) {
-    QPainterPath path; path.moveTo(start);
+// Создание линии с изломами по ГОСТ 2.303-68
+// Паттерн: прямой участок → излом (вверх или вниз) → прямой участок → излом...
+static QPainterPath createZigZagPath(const QPointF& start, const QPointF& end) {
+    QPainterPath path;
+    path.moveTo(start);
+    
     double dx = end.x() - start.x();
     double dy = end.y() - start.y();
     double length = std::sqrt(dx * dx + dy * dy);
@@ -53,19 +59,55 @@ static QPainterPath createZigZagPath(const QPointF& start, const QPointF& end, d
     t.translate(start.x(), start.y());
     t.rotateRadians(angle);
 
-    double worldAmp = 4.0 / zoomFactor;
-    double worldPeriod = 10.0 / zoomFactor; // Период зигзага
-
+    // Используем глобальные настройки
+    const auto& zigzag = GlobalSettings::instance().zigzagParams;
+    double amp = zigzag.amplitude;           // Высота излома
+    double straightLen = zigzag.straightLength; // Длина прямого участка
+    double breakLen = zigzag.breakLength;    // Длина наклонного участка излома
+    
+    // Полный период = прямой + излом (наклон вверх + наклон вниз)
+    double patternLen = straightLen + breakLen * 2.0;
+    
     double currentX = 0;
-    bool up = true;
+    bool goUp = true; // Направление излома чередуется
+    
     while (currentX < length) {
-        currentX += worldPeriod / 2.0;
-        double y = up ? worldAmp : -worldAmp;
-        if (currentX > length) { currentX = length; y = 0; }
-        path.lineTo(t.map(QPointF(currentX, y)));
-        up = !up;
+        // 1. Прямой участок
+        double nextX = currentX + straightLen;
+        if (nextX >= length) {
+            path.lineTo(end);
+            break;
+        }
+        path.lineTo(t.map(QPointF(nextX, 0)));
+        currentX = nextX;
+        
+        // 2. Излом: наклон к пику
+        double peakY = goUp ? amp : -amp;
+        nextX = currentX + breakLen;
+        if (nextX >= length) {
+            path.lineTo(end);
+            break;
+        }
+        path.lineTo(t.map(QPointF(nextX, peakY)));
+        currentX = nextX;
+        
+        // 3. Излом: наклон обратно к линии
+        nextX = currentX + breakLen;
+        if (nextX >= length) {
+            path.lineTo(end);
+            break;
+        }
+        path.lineTo(t.map(QPointF(nextX, 0)));
+        currentX = nextX;
+        
+        goUp = !goUp; // Следующий излом в противоположную сторону
     }
-    path.lineTo(end);
+    
+    // Убедимся, что линия доходит до конца
+    if (path.currentPosition() != end) {
+        path.lineTo(end);
+    }
+    
     return path;
 }
 
@@ -89,31 +131,24 @@ static void drawStyledEllipse(QPainter& painter, const QPointF& center, double r
 
     if (type == LineStyleType::SolidWavy) {
         // Approximate ellipse with segments and use wavy generator
-        auto points = getEllipsePoints(center, rx, ry, std::max(20, int(std::max(rx, ry) / 2)));
+        int numSegments = std::max(20, int(std::max(rx, ry) / 3));
+        auto points = getEllipsePoints(center, rx, ry, numSegments);
         QPainterPath path;
-        double scale = getScale(painter);
         if(!points.empty()) {
             path.moveTo(points[0]);
             for(size_t i = 0; i < points.size() - 1; ++i) {
-                // Generate wavy segment between points
-                // Note: creating individual wavy paths for short segments might look disjointed,
-                // but for a "mini CAD" this is a reasonable approximation without implementing a complex "wave along curve" shader/algo.
-                // Better approach: interpolate the wave along the perimeter distance.
-                
-                // Let's use the createWavyPath for each segment, but we need to ensure continuity.
-                // The current createWavyPath starts at 'start' and ends at 'end'.
-                path.connectPath(createWavyPath(points[i], points[i+1], scale));
+                path.connectPath(createWavyPath(points[i], points[i+1]));
             }
         }
         painter.drawPath(path);
     } else if (type == LineStyleType::SolidZigZag) {
-         auto points = getEllipsePoints(center, rx, ry, std::max(20, int(std::max(rx, ry) / 2)));
+        int numSegments = std::max(20, int(std::max(rx, ry) / 3));
+        auto points = getEllipsePoints(center, rx, ry, numSegments);
         QPainterPath path;
-        double scale = getScale(painter);
         if(!points.empty()) {
             path.moveTo(points[0]);
             for(size_t i = 0; i < points.size() - 1; ++i) {
-                path.connectPath(createZigZagPath(points[i], points[i+1], scale));
+                path.connectPath(createZigZagPath(points[i], points[i+1]));
             }
         }
         painter.drawPath(path);
@@ -141,7 +176,7 @@ static void setupPen(QPainter& painter, const Object* obj, bool isSelected) {
         baseWidth = 2.0;
     }
 
-    // Применяем глобальный масштаб толщины
+    // Применяем ОБЩИЙ глобальный масштаб толщины
     double s = baseWidth * global.globalWidthScale;
     if (s < 0.5) s = 0.5; // Минимальная видимая толщина
 
@@ -199,6 +234,7 @@ static void setupPen(QPainter& painter, const Object* obj, bool isSelected) {
     case LineStyleType::Custom:
         pen.setStyle(Qt::CustomDashLine);
         pen.setWidthF(s);
+        // Для Custom используем индивидуальные параметры объекта, но масштабируем
         dashes << style.dashLength * lsc << style.gapLength * lsc;
         pen.setDashPattern(dashes);
         break;
@@ -226,9 +262,9 @@ void SegmentDraw::draw(QPainter& painter, Object* primitive, bool isSelected) co
 
     auto styleType = s->getLineStyle().type;
     if (styleType == LineStyleType::SolidWavy) {
-        painter.drawPath(createWavyPath(start, end, getScale(painter)));
+        painter.drawPath(createWavyPath(start, end));
     } else if (styleType == LineStyleType::SolidZigZag) {
-        painter.drawPath(createZigZagPath(start, end, getScale(painter)));
+        painter.drawPath(createZigZagPath(start, end));
     } else {
         painter.drawLine(start, end);
     }
@@ -240,7 +276,6 @@ static void drawStyledPath(QPainter& painter, const QPainterPath& path, const Ob
     if (type == LineStyleType::SolidWavy || type == LineStyleType::SolidZigZag) {
         // Iterate elements and apply style to each segment
         QPainterPath styledPath;
-        double scale = getScale(painter);
         
         for (int i = 0; i < path.elementCount() - 1; ++i) {
              QPainterPath::Element e1 = path.elementAt(i);
@@ -254,14 +289,11 @@ static void drawStyledPath(QPainter& painter, const QPainterPath& path, const Ob
              }
 
              if (type == LineStyleType::SolidWavy) {
-                 styledPath.connectPath(createWavyPath(QPointF(e1.x, e1.y), QPointF(e2.x, e2.y), scale));
+                 styledPath.connectPath(createWavyPath(QPointF(e1.x, e1.y), QPointF(e2.x, e2.y)));
              } else {
-                 styledPath.connectPath(createZigZagPath(QPointF(e1.x, e1.y), QPointF(e2.x, e2.y), scale));
+                 styledPath.connectPath(createZigZagPath(QPointF(e1.x, e1.y), QPointF(e2.x, e2.y)));
              }
         }
-        // Handle closing if needed (not automatic for path elements unless we check isClosed)
-        // For simple rects/polygons, we might want to ensure closure.
-        // Assuming path is just a sequence of lines for now.
         painter.drawPath(styledPath);
     } else {
         painter.drawPath(path);
@@ -278,37 +310,28 @@ void CircleDraw::draw(QPainter& painter, Object* primitive, bool isSelected) con
 void ArcDraw::draw(QPainter& painter, Object* primitive, bool isSelected) const {
     auto* obj = static_cast<Arc*>(primitive);
     setupPen(painter, obj, isSelected);
-    // For Arcs, Wavy/ZigZag is complex. Let's approximate if needed, or fallback.
-    // For now, standard arc rendering. If user needs Wavy Arc, we'd need getArcPoints.
-    // Let's implement basic support via path approximation if custom style.
+    
     LineStyleType type = obj->getLineStyle().type;
     if (type == LineStyleType::SolidWavy || type == LineStyleType::SolidZigZag) {
-        QPainterPath path;
-        double r = obj->getRadius();
-        QRectF rect(obj->getCenter().getX() - r, obj->getCenter().getY() - r, r * 2, r * 2);
-        path.arcMoveTo(rect, obj->getStartAngle());
-        path.arcTo(rect, obj->getStartAngle(), obj->getSpanAngle());
-        
-        // Convert arc path to flattened subpaths for styling
         QPainterPath styledPath;
-        double scale = getScale(painter);
-        // Flatten to small lines
-        QPainterPath flatParams = path; // Default flattening is usually fine or we can use toSubpathPolygons
-        // Simple manual approximation:
+        double r = obj->getRadius();
+        Point c = obj->getCenter();
+        
+        // Аппроксимируем дугу отрезками для стилизации
         int steps = std::max(10, int(std::abs(obj->getSpanAngle()) / 5));
         double step = obj->getSpanAngle() / steps;
         double start = obj->getStartAngle();
-        Point c = obj->getCenter();
+        
         QPointF prev(c.getX() + r * std::cos(start * M_PI/180), c.getY() + r * std::sin(start * M_PI/180));
         styledPath.moveTo(prev);
         
-        for(int i=1; i<=steps; ++i) {
-            double a = start + i*step;
+        for(int i = 1; i <= steps; ++i) {
+            double a = start + i * step;
             QPointF cur(c.getX() + r * std::cos(a * M_PI/180), c.getY() + r * std::sin(a * M_PI/180));
-             if (type == LineStyleType::SolidWavy)
-                 styledPath.connectPath(createWavyPath(prev, cur, scale));
-             else 
-                 styledPath.connectPath(createZigZagPath(prev, cur, scale));
+            if (type == LineStyleType::SolidWavy)
+                styledPath.connectPath(createWavyPath(prev, cur));
+            else 
+                styledPath.connectPath(createZigZagPath(prev, cur));
             prev = cur;
         }
         painter.drawPath(styledPath);
@@ -389,28 +412,14 @@ void SplineDraw::draw(QPainter& painter, Object* primitive, bool isSelected) con
     QPainterPath path;
     path.moveTo(points[0].getX(), points[0].getY());
     
-    // Smooth spline using cubic beziers (Catmull-Rom or simple cubic between points)
-    // Simple approach: Cubic to next point using control points based on neighbors
-    // Or just QPainterPath::cubicTo() with estimated control points.
-    // Let's implementation a basic Catmull-Rom spline conversion to Bezier:
-    
-    // Safe bounds check for loop
+    // Smooth spline using cubic beziers (Catmull-Rom spline conversion)
     if (points.size() >= 2) {
         for (size_t i = 0; i < points.size() - 1; ++i) {
             Point p0 = (i == 0) ? points[0] : points[i-1];
             Point p1 = points[i];
             Point p2 = points[i+1];
-            // Safe access for p3
             Point p3 = (i + 2 < points.size()) ? points[i+2] : p2;
 
-            double alpha = 0.5;
-
-            double d1 = std::hypot(p1.getX()-p0.getX(), p1.getY()-p0.getY());
-            double d2 = std::hypot(p2.getX()-p1.getX(), p2.getY()-p1.getY());
-            double d3 = std::hypot(p3.getX()-p2.getX(), p3.getY()-p2.getY());
-            
-            if (d1 < 1e-6) d1 = 1.0; if (d2 < 1e-6) d2 = 1.0; if (d3 < 1e-6) d3 = 1.0;
-            
             double cp1x = p1.getX() + (p2.getX() - p0.getX()) / 6.0;
             double cp1y = p1.getY() + (p2.getY() - p0.getY()) / 6.0;
 

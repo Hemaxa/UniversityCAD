@@ -9,6 +9,20 @@ struct StyleParams {
     double gap2 = 0.0;
 };
 
+// Параметры для волнистой линии
+struct WavyParams {
+    double amplitude = 2.0;   // Амплитуда волны (меньше по ГОСТ)
+    double period = 15.0;     // Период волны (больше по ГОСТ для плавности)
+};
+
+// Параметры для линии с изломами (по ГОСТ 2.303-68)
+// Паттерн: прямой участок → излом вверх → прямой участок → излом вниз → ...
+struct ZigZagParams {
+    double amplitude = 3.0;       // Высота излома
+    double straightLength = 15.0; // Длина прямого участка между изломами
+    double breakLength = 5.0;     // Длина самого излома (наклонный участок)
+};
+
 class GlobalSettings {
 public:
     static GlobalSettings& instance() {
@@ -17,18 +31,30 @@ public:
     }
 
     // Глобальные множители
-    double globalWidthScale = 1.0;
-    double globalLinetypeScale = 1.0; // Влияет на размер штрихов
+    double globalWidthScale = 1.0;       // Общий масштаб толщины для ВСЕХ линий
+    double globalLinetypeScale = 1.0;    // Влияет на размер штрихов
 
     // Параметры стандартных типов
     std::map<LineStyleType, StyleParams> styleParams;
 
+    // Параметры волнистой линии (общие)
+    WavyParams wavyParams;
+    
+    // Параметры линии с изломами (общие)
+    ZigZagParams zigzagParams;
+
 private:
     GlobalSettings() {
-        // Дефолтные настройки по ГОСТ (условно)
+        // Дефолтные настройки по ГОСТ 2.303-68
         styleParams[LineStyleType::Dashed] = {8.0, 3.0};
-        styleParams[LineStyleType::DashDotThin] = {10.0, 3.0, 1.0, 3.0}; // Длинный, пробел, точка(короткий), пробел
+        styleParams[LineStyleType::DashDotThin] = {10.0, 3.0, 1.0, 3.0};
         styleParams[LineStyleType::DashDotThick] = {8.0, 3.0, 1.0, 3.0};
         styleParams[LineStyleType::DashDotDot] = {10.0, 3.0, 1.0, 2.0};
+        
+        // По ГОСТ волнистая линия должна быть плавной
+        wavyParams = {2.0, 15.0};
+        
+        // Линия с изломами: прямой участок 15, излом 5, амплитуда 3
+        zigzagParams = {3.0, 15.0, 5.0};
     }
 };

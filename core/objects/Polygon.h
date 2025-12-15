@@ -20,11 +20,12 @@ public:
     void setInscribed(bool i);
 
     std::vector<SnapPoint> getSnapPoints() const override;
-
-    // --- Добавлено ---
     Point getClosestPoint(const Point& p) const override;
+    std::optional<Point> getPerpendicularPoint(const Point& p) const override;
 
 private:
+    std::vector<Point> getVertices() const;
+
     Point m_center;
     double m_radius;
     int m_sides;

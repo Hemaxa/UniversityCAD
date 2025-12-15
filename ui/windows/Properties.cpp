@@ -614,8 +614,7 @@ void Properties::onRemoveSplinePoint() {
 
 void Properties::applyCurrentStyleTo(Object* obj) const {
     if(!obj) return;
-    LineStyle s = m_currentStyle;
-    // obj->setLineStyle(s); // Ширина теперь глобальная
+    obj->setLineStyle(m_currentStyle);
     obj->setColor(m_selectedColor);
 }
 

@@ -87,6 +87,7 @@ private:
 
     std::unique_ptr<Tool> m_currentTool;
     PrimitiveType m_activeToolType = PrimitiveType::Generic;
+    int m_activeSubMethod = 0;
 
     int m_gridStep = 50;
     double m_zoomStep = 1.25;

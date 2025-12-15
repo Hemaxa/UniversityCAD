@@ -13,6 +13,7 @@ public:
     void addPoint(const Point& p);
 
     std::vector<SnapPoint> getSnapPoints() const override;
+    Point getClosestPoint(const Point& p) const override;
 
 private:
     std::vector<Point> m_points;

@@ -10,14 +10,14 @@
 #include "MathUtils.h"
 #include "Properties.h"
 #include <cmath>
-#include <algorithm> // Для std::min, std::max
+#include <algorithm>
 #include <QPen>
+#include <QPainterPath>
 
 // Хелпер для обновления привязки с учетом контекста (предыдущей точки)
 void updateSnap(const Point& worldPos, const Snapper& snapper, double scale,
                 const std::optional<Point>& prevPoint,
                 Point& outPos, Point& outSnapPt, bool& outIsSnapped) {
-    // Передаем prevPoint в метод snap для поиска касательных и перпендикуляров
     auto res = snapper.snap(worldPos, scale, prevPoint);
     if (res.snapped) {
         outPos = res.point;
@@ -36,10 +36,17 @@ void drawSnapMarker(QPainter& painter, const Point& p, double scale) {
     painter.drawRect(QRectF(p.getX() - s/2, p.getY() - s/2, s, s));
 }
 
+// Вспомогательная функция для отрисовки маркера точки
+void drawPointMarker(QPainter& painter, const Point& p, double scale, const QColor& color = Qt::cyan) {
+    double s = 6.0 / scale;
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(color);
+    painter.drawEllipse(QPointF(p.getX(), p.getY()), s/2, s/2);
+}
+
 // --- Segment ---
 void CreateSegmentTool::onMousePress(const Point& worldPos, const Snapper& snapper, double scale) {
     Point target;
-    // Передаем m_startPoint как контекст, если он есть
     updateSnap(worldPos, snapper, scale, m_startPoint, target, m_snapPoint, m_isSnapped);
 
     if (!m_startPoint.has_value()) {
@@ -61,6 +68,8 @@ void CreateSegmentTool::draw(QPainter& painter, double scale) {
     if (m_startPoint.has_value()) {
         QPen pen(Qt::white, 1.0, Qt::DashLine); pen.setCosmetic(true); painter.setPen(pen);
         painter.drawLine(QPointF(m_startPoint->getX(), m_startPoint->getY()), QPointF(m_endPoint.getX(), m_endPoint.getY()));
+        // Маркер начальной точки
+        drawPointMarker(painter, m_startPoint.value(), scale, Qt::yellow);
     }
 }
 
@@ -72,7 +81,6 @@ CreateCircleTool::CreateCircleTool(int method) : m_method(method) {}
 
 void CreateCircleTool::onMousePress(const Point& worldPos, const Snapper& snapper, double scale) {
     Point target;
-    // Контекст - последняя нажатая точка, если есть
     std::optional<Point> prev = m_clicks.empty() ? std::nullopt : std::make_optional(m_clicks.back());
     updateSnap(worldPos, snapper, scale, prev, target, m_snapPoint, m_isSnapped);
 
@@ -126,22 +134,43 @@ void CreateCircleTool::draw(QPainter& painter, double scale) {
     if (m_isSnapped) drawSnapMarker(painter, m_snapPoint, scale);
     QPen pen(Qt::white, 1.0, Qt::DashLine); pen.setCosmetic(true); painter.setPen(pen);
 
+    // Маркеры уже кликнутых точек
+    for (const auto& p : m_clicks) {
+        drawPointMarker(painter, p, scale, Qt::yellow);
+    }
+
     if (m_clicks.empty()) return;
 
     if (m_method == 0) { // Center + R
         double r = MathUtils::dist(m_clicks[0], m_cursorPos);
         painter.drawEllipse(QPointF(m_clicks[0].getX(), m_clicks[0].getY()), r, r);
+        // Вспомогательная линия от центра к курсору (радиус)
+        painter.drawLine(QPointF(m_clicks[0].getX(), m_clicks[0].getY()), 
+                        QPointF(m_cursorPos.getX(), m_cursorPos.getY()));
     }
     else if (m_method == 1) { // Center + D
         double d_dist = MathUtils::dist(m_clicks[0], m_cursorPos);
         painter.drawEllipse(QPointF(m_clicks[0].getX(), m_clicks[0].getY()), d_dist, d_dist);
+        // Линия диаметра
+        painter.drawLine(QPointF(m_clicks[0].getX(), m_clicks[0].getY()), 
+                        QPointF(m_cursorPos.getX(), m_cursorPos.getY()));
     }
     else if (m_method == 2) { // 2 Points (Diameter)
         Point center((m_clicks[0].getX() + m_cursorPos.getX())/2, (m_clicks[0].getY() + m_cursorPos.getY())/2);
         double r = MathUtils::dist(m_clicks[0], m_cursorPos) / 2.0;
         painter.drawEllipse(QPointF(center.getX(), center.getY()), r, r);
+        // Линия диаметра между точками
+        painter.drawLine(QPointF(m_clicks[0].getX(), m_clicks[0].getY()), 
+                        QPointF(m_cursorPos.getX(), m_cursorPos.getY()));
     }
     else if (m_method == 3) {
+        // Отрисовываем линии между точками
+        for (size_t i = 0; i < m_clicks.size(); ++i) {
+            Point next = (i + 1 < m_clicks.size()) ? m_clicks[i+1] : m_cursorPos;
+            painter.drawLine(QPointF(m_clicks[i].getX(), m_clicks[i].getY()), 
+                            QPointF(next.getX(), next.getY()));
+        }
+        
         if (m_clicks.size() == 2) {
             Point center; double r;
             if (MathUtils::getCircleFrom3Points(m_clicks[0], m_clicks[1], m_cursorPos, center, r)) {
@@ -170,9 +199,26 @@ void CreateRectangleTool::onMousePress(const Point& worldPos, const Snapper& sna
         }
         else {
             m_end = target;
-            // ИСПРАВЛЕНИЕ: Прямоугольник между двумя углами
             double minX = std::min(m_start->getX(), m_end.getX());
-            double maxY = std::max(m_start->getY(), m_end.getY()); // В мире Y вверх
+            double maxY = std::max(m_start->getY(), m_end.getY());
+            double w = std::abs(m_end.getX() - m_start->getX());
+            double h = std::abs(m_end.getY() - m_start->getY());
+
+            Point tl(minX, maxY);
+            m_result = std::make_unique<Rectangle>(tl, w, h);
+            m_finished = true;
+        }
+    }
+    // 1: Corner + Width/Height (первая точка - угол, вторая - противоположный по диагонали)
+    else if (m_method == 1) {
+        if (!m_start.has_value()) {
+            m_start = target;
+            m_end = target;
+        }
+        else {
+            m_end = target;
+            double minX = std::min(m_start->getX(), m_end.getX());
+            double maxY = std::max(m_start->getY(), m_end.getY());
             double w = std::abs(m_end.getX() - m_start->getX());
             double h = std::abs(m_end.getY() - m_start->getY());
 
@@ -206,19 +252,24 @@ void CreateRectangleTool::draw(QPainter& painter, double scale) {
     if (m_isSnapped) drawSnapMarker(painter, m_snapPoint, scale);
     if (m_start.has_value()) {
         QPen pen(Qt::white, 1.0, Qt::DashLine); pen.setCosmetic(true); painter.setPen(pen);
+        drawPointMarker(painter, m_start.value(), scale, Qt::yellow);
 
-        if (m_method == 0) {
-            // Рисуем рамку
+        if (m_method == 0 || m_method == 1) {
             double minX = std::min(m_start->getX(), m_end.getX());
             double maxY = std::max(m_start->getY(), m_end.getY());
             double w = std::abs(m_end.getX() - m_start->getX());
             double h = std::abs(m_end.getY() - m_start->getY());
-            // Рисуем от верхнего левого вниз
             painter.drawRect(QRectF(minX, maxY - h, w, h));
         } else if (m_method == 2) {
             double halfW = std::abs(m_end.getX() - m_start->getX());
             double halfH = std::abs(m_end.getY() - m_start->getY());
             painter.drawRect(QRectF(m_start->getX() - halfW, m_start->getY() - halfH, halfW*2, halfH*2));
+            // Крестик в центре
+            double cs = 5.0 / scale;
+            painter.drawLine(QPointF(m_start->getX() - cs, m_start->getY()), 
+                            QPointF(m_start->getX() + cs, m_start->getY()));
+            painter.drawLine(QPointF(m_start->getX(), m_start->getY() - cs), 
+                            QPointF(m_start->getX(), m_start->getY() + cs));
         }
     }
 }
@@ -236,39 +287,52 @@ void CreateArcTool::onMousePress(const Point& worldPos, const Snapper& snapper, 
 
     m_clicks.push_back(target);
 
-    // 0: Center, Start (radius), Span
+    // 0: Center, Start (radius + start angle), End angle
     if (m_method == 0) {
-        if (m_clicks.size() == 2) {
-            // Center -> Start point (определяет R и start angle)
-        } else if (m_clicks.size() == 3) {
+        if (m_clicks.size() == 3) {
             Point center = m_clicks[0];
             double r = MathUtils::dist(center, m_clicks[1]);
-            double start = std::atan2(m_clicks[1].getY() - center.getY(), m_clicks[1].getX() - center.getX()) * 180.0 / M_PI;
-            double end = std::atan2(m_clicks[2].getY() - center.getY(), m_clicks[2].getX() - center.getX()) * 180.0 / M_PI;
-            double span = end - start;
-            if (span < -180) span += 360; if (span > 180) span -= 360;
-            m_result = std::make_unique<Arc>(center, r, start, span);
+            double startAngle = std::atan2(m_clicks[1].getY() - center.getY(), m_clicks[1].getX() - center.getX()) * 180.0 / M_PI;
+            double endAngle = std::atan2(m_clicks[2].getY() - center.getY(), m_clicks[2].getX() - center.getX()) * 180.0 / M_PI;
+            double span = endAngle - startAngle;
+            // Нормализация угла для корректного отображения
+            while (span < 0) span += 360;
+            if (span > 360) span -= 360;
+            m_result = std::make_unique<Arc>(center, r, startAngle, span);
             m_finished = true;
         }
     }
-    // 1: 3 Points
+    // 1: 3 Points (Start, Through, End)
     else if (m_method == 1) {
         if (m_clicks.size() == 3) {
             Point c; double r;
             if (MathUtils::getCircleFrom3Points(m_clicks[0], m_clicks[1], m_clicks[2], c, r)) {
-                double start = std::atan2(m_clicks[0].getY() - c.getY(), m_clicks[0].getX() - c.getX()) * 180.0 / M_PI;
-                double end = std::atan2(m_clicks[2].getY() - c.getY(), m_clicks[2].getX() - c.getX()) * 180.0 / M_PI;
-                double span = end - start;
-                // Проверка ориентации (простая версия)
-                double mid = std::atan2(m_clicks[1].getY() - c.getY(), m_clicks[1].getX() - c.getX()) * 180.0 / M_PI;
-                auto norm = [](double a){ while(a<0) a+=360; while(a>=360) a-=360; return a; };
-                double s = norm(start), e = norm(end), m = norm(mid);
-                bool normal = (s<e) ? (m>s && m<e) : (m>s || m<e);
-                if (!normal) { span = span - 360; if(span < -360) span += 360; }
-                if (span == 0) span = 360;
-                m_result = std::make_unique<Arc>(c, r, start, span);
+                double startAngle = std::atan2(m_clicks[0].getY() - c.getY(), m_clicks[0].getX() - c.getX()) * 180.0 / M_PI;
+                double endAngle = std::atan2(m_clicks[2].getY() - c.getY(), m_clicks[2].getX() - c.getX()) * 180.0 / M_PI;
+                double midAngle = std::atan2(m_clicks[1].getY() - c.getY(), m_clicks[1].getX() - c.getX()) * 180.0 / M_PI;
+                
+                // Нормализуем углы
+                auto norm = [](double a){ while(a < 0) a += 360; while(a >= 360) a -= 360; return a; };
+                double s = norm(startAngle), e = norm(endAngle), m = norm(midAngle);
+                
+                // Определяем направление дуги - проверяем, лежит ли средняя точка на дуге
+                double span = e - s;
+                if (span < 0) span += 360;
+                
+                // Проверяем, находится ли средняя точка между начальной и конечной по дуге
+                double midDiff = m - s;
+                if (midDiff < 0) midDiff += 360;
+                
+                // Если средняя точка не на дуге от s к e (по возрастанию угла), идём в другую сторону
+                if (midDiff > span) {
+                    span = span - 360;
+                }
+                
+                m_result = std::make_unique<Arc>(c, r, startAngle, span);
                 m_finished = true;
-            } else m_clicks.pop_back();
+            } else {
+                m_clicks.pop_back();
+            }
         }
     }
 }
@@ -280,14 +344,103 @@ void CreateArcTool::onMouseMove(const Point& worldPos, const Snapper& snapper, d
 
 void CreateArcTool::draw(QPainter& painter, double scale) {
     if (m_isSnapped) drawSnapMarker(painter, m_snapPoint, scale);
-    QPen pen(Qt::white, 1.0, Qt::DashLine); pen.setCosmetic(true); painter.setPen(pen);
+    QPen dashPen(Qt::white, 1.0, Qt::DashLine); dashPen.setCosmetic(true);
+    QPen solidPen(QColor("#66D9EF"), 1.5, Qt::SolidLine); solidPen.setCosmetic(true);
 
-    if (m_method == 0) {
+    // Маркеры кликнутых точек
+    for (const auto& p : m_clicks) {
+        drawPointMarker(painter, p, scale, Qt::yellow);
+    }
+
+    if (m_method == 0) { // Center, Start, End
         if (m_clicks.size() >= 1) {
-            painter.drawLine(QPointF(m_clicks[0].getX(), m_clicks[0].getY()), QPointF(m_cursorPos.getX(), m_cursorPos.getY()));
-            if (m_clicks.size() == 2) {
-                double r = MathUtils::dist(m_clicks[0], m_clicks[1]);
-                painter.drawEllipse(QPointF(m_clicks[0].getX(), m_clicks[0].getY()), r, r);
+            Point center = m_clicks[0];
+            
+            // Пунктирная линия от центра к курсору
+            painter.setPen(dashPen);
+            painter.drawLine(QPointF(center.getX(), center.getY()), 
+                            QPointF(m_cursorPos.getX(), m_cursorPos.getY()));
+            
+            if (m_clicks.size() >= 2) {
+                double r = MathUtils::dist(center, m_clicks[1]);
+                
+                // Пунктирная окружность (базовая)
+                QPen circPen(Qt::gray, 0.5, Qt::DotLine); circPen.setCosmetic(true);
+                painter.setPen(circPen);
+                painter.drawEllipse(QPointF(center.getX(), center.getY()), r, r);
+                
+                // Пунктирная линия от центра к начальной точке
+                painter.setPen(dashPen);
+                painter.drawLine(QPointF(center.getX(), center.getY()), 
+                                QPointF(m_clicks[1].getX(), m_clicks[1].getY()));
+                
+                // Вычисляем и рисуем дугу
+                double startAngle = std::atan2(m_clicks[1].getY() - center.getY(), 
+                                               m_clicks[1].getX() - center.getX()) * 180.0 / M_PI;
+                double endAngle = std::atan2(m_cursorPos.getY() - center.getY(), 
+                                             m_cursorPos.getX() - center.getX()) * 180.0 / M_PI;
+                double span = endAngle - startAngle;
+                while (span < 0) span += 360;
+                if (span > 360) span -= 360;
+                
+                // Рисуем саму дугу
+                painter.setPen(solidPen);
+                QRectF rect(center.getX() - r, center.getY() - r, r * 2, r * 2);
+                painter.drawArc(rect, int(startAngle * 16), int(span * 16));
+                
+                // Конечная точка на окружности
+                Point endPt(center.getX() + r * std::cos(endAngle * M_PI / 180.0),
+                           center.getY() + r * std::sin(endAngle * M_PI / 180.0));
+                drawPointMarker(painter, endPt, scale, Qt::green);
+            }
+        }
+    }
+    else if (m_method == 1) { // 3 Points
+        painter.setPen(dashPen);
+        
+        // Линии между точками
+        for (size_t i = 0; i < m_clicks.size(); ++i) {
+            Point next = (i + 1 < m_clicks.size()) ? m_clicks[i+1] : m_cursorPos;
+            painter.drawLine(QPointF(m_clicks[i].getX(), m_clicks[i].getY()), 
+                            QPointF(next.getX(), next.getY()));
+        }
+        
+        if (m_clicks.size() == 2) {
+            Point c; double r;
+            if (MathUtils::getCircleFrom3Points(m_clicks[0], m_clicks[1], m_cursorPos, c, r)) {
+                // Пунктирная окружность
+                QPen circPen(Qt::gray, 0.5, Qt::DotLine); circPen.setCosmetic(true);
+                painter.setPen(circPen);
+                painter.drawEllipse(QPointF(c.getX(), c.getY()), r, r);
+                
+                // Вычисляем дугу
+                double startAngle = std::atan2(m_clicks[0].getY() - c.getY(), 
+                                               m_clicks[0].getX() - c.getX()) * 180.0 / M_PI;
+                double endAngle = std::atan2(m_cursorPos.getY() - c.getY(), 
+                                             m_cursorPos.getX() - c.getX()) * 180.0 / M_PI;
+                double midAngle = std::atan2(m_clicks[1].getY() - c.getY(), 
+                                             m_clicks[1].getX() - c.getX()) * 180.0 / M_PI;
+                
+                auto norm = [](double a){ while(a < 0) a += 360; while(a >= 360) a -= 360; return a; };
+                double s = norm(startAngle), e = norm(endAngle), m = norm(midAngle);
+                
+                double span = e - s;
+                if (span < 0) span += 360;
+                
+                double midDiff = m - s;
+                if (midDiff < 0) midDiff += 360;
+                
+                if (midDiff > span) {
+                    span = span - 360;
+                }
+                
+                // Рисуем дугу
+                painter.setPen(solidPen);
+                QRectF rect(c.getX() - r, c.getY() - r, r * 2, r * 2);
+                painter.drawArc(rect, int(startAngle * 16), int(span * 16));
+                
+                // Маркер центра
+                drawPointMarker(painter, c, scale, QColor("#F92672"));
             }
         }
     }
@@ -297,52 +450,125 @@ std::unique_ptr<Object> CreateArcTool::takeObject() { return std::move(m_result)
 void CreateArcTool::reset() { m_finished = false; m_clicks.clear(); }
 
 // --- Ellipse ---
+// Методы: 0 - Центр+Радиусы (одним кликом задаём центр, вторым - угол эллипса)
+//         1 - Центр+2 оси (центр, затем точка на оси X, затем точка на оси Y)
+CreateEllipseTool::CreateEllipseTool(int method) : m_method(method) {}
+
 void CreateEllipseTool::onMousePress(const Point& worldPos, const Snapper& snapper, double scale) {
     Point target;
-    std::optional<Point> prev = m_center;
+    std::optional<Point> prev = m_clicks.empty() ? std::nullopt : std::make_optional(m_clicks.back());
     updateSnap(worldPos, snapper, scale, prev, target, m_snapPoint, m_isSnapped);
 
-    if (!m_center.has_value()) { m_center = target; }
-    else {
-        m_rx = std::abs(target.getX() - m_center->getX());
-        m_ry = std::abs(target.getY() - m_center->getY());
-        if(m_rx < 1e-3) m_rx = 1.0; if(m_ry < 1e-3) m_ry = 1.0;
-        m_result = std::make_unique<Ellipse>(m_center.value(), m_rx, m_ry);
-        m_finished = true;
+    m_clicks.push_back(target);
+
+    // Метод 0: Центр + угловая точка (определяет оба радиуса)
+    if (m_method == 0) {
+        if (m_clicks.size() == 2) {
+            Point center = m_clicks[0];
+            m_rx = std::abs(m_clicks[1].getX() - center.getX());
+            m_ry = std::abs(m_clicks[1].getY() - center.getY());
+            if (m_rx < 1e-3) m_rx = 1.0;
+            if (m_ry < 1e-3) m_ry = 1.0;
+            m_result = std::make_unique<Ellipse>(center, m_rx, m_ry);
+            m_finished = true;
+        }
+    }
+    // Метод 1: Центр + 2 оси (3 клика: центр, точка на оси X, точка на оси Y)
+    else if (m_method == 1) {
+        if (m_clicks.size() == 3) {
+            Point center = m_clicks[0];
+            m_rx = MathUtils::dist(center, m_clicks[1]);
+            m_ry = MathUtils::dist(center, m_clicks[2]);
+            if (m_rx < 1e-3) m_rx = 1.0;
+            if (m_ry < 1e-3) m_ry = 1.0;
+            m_result = std::make_unique<Ellipse>(center, m_rx, m_ry);
+            m_finished = true;
+        }
     }
 }
 
 void CreateEllipseTool::onMouseMove(const Point& worldPos, const Snapper& snapper, double scale) {
-    Point target;
-    updateSnap(worldPos, snapper, scale, m_center, target, m_snapPoint, m_isSnapped);
+    std::optional<Point> prev = m_clicks.empty() ? std::nullopt : std::make_optional(m_clicks.back());
+    updateSnap(worldPos, snapper, scale, prev, m_cursorPos, m_snapPoint, m_isSnapped);
 
-    if (m_center.has_value()) {
-        m_rx = std::abs(target.getX() - m_center->getX());
-        m_ry = std::abs(target.getY() - m_center->getY());
+    if (!m_clicks.empty()) {
+        Point center = m_clicks[0];
+        if (m_method == 0) {
+            m_rx = std::abs(m_cursorPos.getX() - center.getX());
+            m_ry = std::abs(m_cursorPos.getY() - center.getY());
+        } else if (m_method == 1) {
+            if (m_clicks.size() == 1) {
+                m_rx = MathUtils::dist(center, m_cursorPos);
+                m_ry = 0;
+            } else if (m_clicks.size() == 2) {
+                m_rx = MathUtils::dist(center, m_clicks[1]);
+                m_ry = MathUtils::dist(center, m_cursorPos);
+            }
+        }
     }
 }
 
 void CreateEllipseTool::draw(QPainter& painter, double scale) {
     if (m_isSnapped) drawSnapMarker(painter, m_snapPoint, scale);
-    if (m_center.has_value()) {
-        QPen pen(Qt::white, 1.0, Qt::DashLine); pen.setCosmetic(true); painter.setPen(pen);
-        painter.drawEllipse(QPointF(m_center->getX(), m_center->getY()), m_rx, m_ry);
+    QPen pen(Qt::white, 1.0, Qt::DashLine); pen.setCosmetic(true); painter.setPen(pen);
+
+    // Маркеры кликнутых точек
+    for (const auto& p : m_clicks) {
+        drawPointMarker(painter, p, scale, Qt::yellow);
+    }
+
+    if (m_clicks.empty()) return;
+    Point center = m_clicks[0];
+
+    if (m_method == 0) {
+        // Рисуем эллипс
+        painter.drawEllipse(QPointF(center.getX(), center.getY()), m_rx, m_ry);
+        // Оси пунктиром
+        painter.drawLine(QPointF(center.getX() - m_rx, center.getY()), 
+                        QPointF(center.getX() + m_rx, center.getY()));
+        painter.drawLine(QPointF(center.getX(), center.getY() - m_ry), 
+                        QPointF(center.getX(), center.getY() + m_ry));
+    }
+    else if (m_method == 1) {
+        // Рисуем линии осей
+        if (m_clicks.size() >= 1) {
+            painter.drawLine(QPointF(center.getX(), center.getY()), 
+                            QPointF(m_cursorPos.getX(), m_cursorPos.getY()));
+        }
+        if (m_clicks.size() >= 2) {
+            // Ось X зафиксирована
+            painter.drawLine(QPointF(center.getX(), center.getY()), 
+                            QPointF(m_clicks[1].getX(), m_clicks[1].getY()));
+            // Ось Y к курсору
+            painter.drawLine(QPointF(center.getX(), center.getY()), 
+                            QPointF(m_cursorPos.getX(), m_cursorPos.getY()));
+        }
+        // Рисуем предварительный эллипс
+        double rx = m_rx > 0 ? m_rx : 1;
+        double ry = m_ry > 0 ? m_ry : 1;
+        painter.drawEllipse(QPointF(center.getX(), center.getY()), rx, ry);
     }
 }
 
 std::unique_ptr<Object> CreateEllipseTool::takeObject() { return std::move(m_result); }
-void CreateEllipseTool::reset() { m_finished = false; m_center.reset(); }
+void CreateEllipseTool::reset() { m_finished = false; m_clicks.clear(); m_rx = 0; m_ry = 0; }
 
 // --- Polygon ---
+// Методы: 0 - Вписанный (вершины на окружности), 1 - Описанный (стороны касаются окружности)
+CreatePolygonTool::CreatePolygonTool(int method) : m_method(method) {}
+
 void CreatePolygonTool::onMousePress(const Point& worldPos, const Snapper& snapper, double scale) {
     Point target;
     std::optional<Point> prev = m_center;
     updateSnap(worldPos, snapper, scale, prev, target, m_snapPoint, m_isSnapped);
 
-    if (!m_center.has_value()) { m_center = target; }
+    if (!m_center.has_value()) { 
+        m_center = target; 
+    }
     else {
         m_radius = MathUtils::dist(target, m_center.value());
-        m_result = std::make_unique<PolygonObj>(m_center.value(), m_radius, 5);
+        bool inscribed = (m_method == 0); // 0 = вписанный, 1 = описанный
+        m_result = std::make_unique<PolygonObj>(m_center.value(), m_radius, 5, inscribed);
         m_finished = true;
     }
 }
@@ -357,12 +583,40 @@ void CreatePolygonTool::draw(QPainter& painter, double scale) {
     if (m_isSnapped) drawSnapMarker(painter, m_snapPoint, scale);
     if (m_center.has_value()) {
         QPen pen(Qt::white, 1.0, Qt::DashLine); pen.setCosmetic(true); painter.setPen(pen);
+        
+        int sides = 5;
+        double step = 2 * M_PI / sides;
+        double startAngle = M_PI / 2;
+        
+        // Радиус для отрисовки (зависит от метода)
+        double drawRadius = m_radius;
+        if (m_method == 1) { // Описанный - радиус до середины стороны
+            drawRadius = m_radius / std::cos(M_PI / sides);
+        }
+        
+        // Окружность
         painter.drawEllipse(QPointF(m_center->getX(), m_center->getY()), m_radius, m_radius);
+        
+        // Сам многоугольник
+        QPolygonF poly;
+        for (int i = 0; i < sides; ++i) {
+            double angle = startAngle + i * step;
+            poly << QPointF(m_center->getX() + drawRadius * std::cos(angle),
+                           m_center->getY() + drawRadius * std::sin(angle));
+        }
+        painter.drawPolygon(poly);
+        
+        // Маркер центра
+        drawPointMarker(painter, m_center.value(), scale, Qt::yellow);
+        
+        // Линия от центра к курсору
+        painter.drawLine(QPointF(m_center->getX(), m_center->getY()), 
+                        QPointF(m_center->getX() + m_radius, m_center->getY()));
     }
 }
 
 std::unique_ptr<Object> CreatePolygonTool::takeObject() { return std::move(m_result); }
-void CreatePolygonTool::reset() { m_finished = false; m_center.reset(); }
+void CreatePolygonTool::reset() { m_finished = false; m_center.reset(); m_radius = 0; }
 
 // --- Spline ---
 void CreateSplineTool::onMousePress(const Point& worldPos, const Snapper& snapper, double scale) {
@@ -389,10 +643,19 @@ void CreateSplineTool::finish() {
 void CreateSplineTool::draw(QPainter& painter, double scale) {
     if (m_isSnapped) drawSnapMarker(painter, m_snapPoint, scale);
     QPen pen(Qt::white, 1.0, Qt::DashLine); pen.setCosmetic(true); painter.setPen(pen);
+    
+    // Маркеры всех точек
+    for (const auto& p : m_points) {
+        drawPointMarker(painter, p, scale, Qt::yellow);
+    }
+    
     if (!m_points.empty()) {
-        for(size_t i=0; i<m_points.size()-1; ++i)
-            painter.drawLine(QPointF(m_points[i].getX(), m_points[i].getY()), QPointF(m_points[i+1].getX(), m_points[i+1].getY()));
-        painter.drawLine(QPointF(m_points.back().getX(), m_points.back().getY()), QPointF(m_currentPos.getX(), m_currentPos.getY()));
+        // Линии между точками
+        for(size_t i = 0; i < m_points.size() - 1; ++i)
+            painter.drawLine(QPointF(m_points[i].getX(), m_points[i].getY()), 
+                            QPointF(m_points[i+1].getX(), m_points[i+1].getY()));
+        painter.drawLine(QPointF(m_points.back().getX(), m_points.back().getY()), 
+                        QPointF(m_currentPos.getX(), m_currentPos.getY()));
     }
 }
 

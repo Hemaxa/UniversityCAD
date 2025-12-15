@@ -68,10 +68,11 @@ void Viewport::setObjectSnap(bool enabled) { m_objectSnapEnabled = enabled; }
 
 void Viewport::setActiveTool(PrimitiveType type, int subMethod) {
     m_activeToolType = type;
+    m_activeSubMethod = subMethod;
     m_selectedObjects.clear();
     emit selectionChanged({});
 
-    // Передаем subMethod в инструменты
+    // Передаем subMethod в инструменты для всех типов
     switch (type) {
     case PrimitiveType::Segment:
         m_currentTool = std::make_unique<CreateSegmentTool>();
@@ -86,10 +87,10 @@ void Viewport::setActiveTool(PrimitiveType type, int subMethod) {
         m_currentTool = std::make_unique<CreateArcTool>(subMethod);
         break;
     case PrimitiveType::Ellipse:
-        m_currentTool = std::make_unique<CreateEllipseTool>();
+        m_currentTool = std::make_unique<CreateEllipseTool>(subMethod);
         break;
     case PrimitiveType::Polygon:
-        m_currentTool = std::make_unique<CreatePolygonTool>();
+        m_currentTool = std::make_unique<CreatePolygonTool>(subMethod);
         break;
     case PrimitiveType::Spline:
         m_currentTool = std::make_unique<CreateSplineTool>();
@@ -255,6 +256,15 @@ std::vector<Object*> Viewport::pickObjects(const QRect& screenRect) {
                 check(Point(center.getX(), center.getY()-r))) inside = true;
             break;
         }
+        case PrimitiveType::Arc: {
+            auto* a = static_cast<Arc*>(obj.get());
+            Point center = a->getCenter();
+            double r = a->getRadius();
+            // Проверяем bounding box дуги
+            if (check(Point(center.getX()-r, center.getY()-r)) && 
+                check(Point(center.getX()+r, center.getY()+r))) inside = true;
+            break;
+        }
         case PrimitiveType::Rectangle: {
             auto* r = static_cast<Rectangle*>(obj.get());
             Point tl = r->getTopLeft();
@@ -264,10 +274,32 @@ std::vector<Object*> Viewport::pickObjects(const QRect& screenRect) {
                 check(Point(tl.getX()+r->getWidth(), tl.getY()-r->getHeight()))) inside = true;
             break;
         }
+        case PrimitiveType::Ellipse: {
+            auto* e = static_cast<Ellipse*>(obj.get());
+            Point center = e->getCenter();
+            double rx = e->getRadiusX();
+            double ry = e->getRadiusY();
+            if (check(Point(center.getX()-rx, center.getY()-ry)) && 
+                check(Point(center.getX()+rx, center.getY()+ry))) inside = true;
+            break;
+        }
         case PrimitiveType::Polygon: {
             auto* p = static_cast<PolygonObj*>(obj.get());
             Point c = p->getCenter(); double r = p->getRadius();
             if (check(Point(c.getX()-r, c.getY()-r)) && check(Point(c.getX()+r, c.getY()+r))) inside = true;
+            break;
+        }
+        case PrimitiveType::Spline: {
+            auto* sp = static_cast<Spline*>(obj.get());
+            const auto& pts = sp->getPoints();
+            if (!pts.empty()) {
+                // Проверяем все контрольные точки
+                bool allInside = true;
+                for (const auto& p : pts) {
+                    if (!check(p)) { allInside = false; break; }
+                }
+                if (allInside) inside = true;
+            }
             break;
         }
         default: break;

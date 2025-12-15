@@ -9,7 +9,7 @@
 
 class Scene;
 class Snapper;
-class Object; // <--- ДОБАВЛЕНО: Сообщаем компилятору, что класс Object существует
+class Object;
 
 class Tool {
 public:
@@ -45,9 +45,10 @@ private:
 };
 
 // --- Circle ---
+// Методы: 0 - Центр+Радиус, 1 - Центр+Диаметр, 2 - 2 точки (диаметр), 3 - 3 точки
 class CreateCircleTool : public Tool {
 public:
-    explicit CreateCircleTool(int method); // 0:R, 1:D, 2:2P, 3:3P
+    explicit CreateCircleTool(int method);
     void onMousePress(const Point& worldPos, const Snapper& snapper, double scale) override;
     void onMouseMove(const Point& worldPos, const Snapper& snapper, double scale) override;
     void draw(QPainter& painter, double scale) override;
@@ -61,9 +62,10 @@ private:
 };
 
 // --- Rectangle ---
+// Методы: 0 - 2 точки, 1 - Точка+Размер, 2 - Центр+Размер
 class CreateRectangleTool : public Tool {
 public:
-    explicit CreateRectangleTool(int method); // 0:2P, 1:P+Size(не реализован в этом коде), 2:Center+Size
+    explicit CreateRectangleTool(int method);
     void onMousePress(const Point& worldPos, const Snapper& snapper, double scale) override;
     void onMouseMove(const Point& worldPos, const Snapper& snapper, double scale) override;
     void draw(QPainter& painter, double scale) override;
@@ -77,9 +79,10 @@ private:
 };
 
 // --- Arc ---
+// Методы: 0 - Центр+Углы, 1 - 3 точки
 class CreateArcTool : public Tool {
 public:
-    explicit CreateArcTool(int method); // 0:Center, 1:3P
+    explicit CreateArcTool(int method);
     void onMousePress(const Point& worldPos, const Snapper& snapper, double scale) override;
     void onMouseMove(const Point& worldPos, const Snapper& snapper, double scale) override;
     void draw(QPainter& painter, double scale) override;
@@ -93,28 +96,35 @@ private:
 };
 
 // --- Ellipse ---
+// Методы: 0 - Центр+Радиусы, 1 - Центр+2 оси (точки)
 class CreateEllipseTool : public Tool {
 public:
+    explicit CreateEllipseTool(int method = 0);
     void onMousePress(const Point& worldPos, const Snapper& snapper, double scale) override;
     void onMouseMove(const Point& worldPos, const Snapper& snapper, double scale) override;
     void draw(QPainter& painter, double scale) override;
     std::unique_ptr<Object> takeObject() override;
     void reset() override;
 private:
-    std::optional<Point> m_center;
+    int m_method;
+    std::vector<Point> m_clicks;
+    Point m_cursorPos;
     double m_rx = 0, m_ry = 0;
     std::unique_ptr<Object> m_result;
 };
 
 // --- Polygon ---
+// Методы: 0 - Центр+Радиус (вписанный), 1 - Центр+Радиус (описанный)
 class CreatePolygonTool : public Tool {
 public:
+    explicit CreatePolygonTool(int method = 0);
     void onMousePress(const Point& worldPos, const Snapper& snapper, double scale) override;
     void onMouseMove(const Point& worldPos, const Snapper& snapper, double scale) override;
     void draw(QPainter& painter, double scale) override;
     std::unique_ptr<Object> takeObject() override;
     void reset() override;
 private:
+    int m_method;
     std::optional<Point> m_center;
     double m_radius = 0;
     std::unique_ptr<Object> m_result;
