@@ -68,8 +68,6 @@ void CreateSegmentTool::draw(QPainter& painter, double scale) {
     if (m_startPoint.has_value()) {
         QPen pen(Qt::white, 1.0, Qt::DashLine); pen.setCosmetic(true); painter.setPen(pen);
         painter.drawLine(QPointF(m_startPoint->getX(), m_startPoint->getY()), QPointF(m_endPoint.getX(), m_endPoint.getY()));
-        // Маркер начальной точки
-        drawPointMarker(painter, m_startPoint.value(), scale, Qt::yellow);
     }
 }
 
@@ -133,11 +131,6 @@ void CreateCircleTool::onMouseMove(const Point& worldPos, const Snapper& snapper
 void CreateCircleTool::draw(QPainter& painter, double scale) {
     if (m_isSnapped) drawSnapMarker(painter, m_snapPoint, scale);
     QPen pen(Qt::white, 1.0, Qt::DashLine); pen.setCosmetic(true); painter.setPen(pen);
-
-    // Маркеры уже кликнутых точек
-    for (const auto& p : m_clicks) {
-        drawPointMarker(painter, p, scale, Qt::yellow);
-    }
 
     if (m_clicks.empty()) return;
 
@@ -252,7 +245,6 @@ void CreateRectangleTool::draw(QPainter& painter, double scale) {
     if (m_isSnapped) drawSnapMarker(painter, m_snapPoint, scale);
     if (m_start.has_value()) {
         QPen pen(Qt::white, 1.0, Qt::DashLine); pen.setCosmetic(true); painter.setPen(pen);
-        drawPointMarker(painter, m_start.value(), scale, Qt::yellow);
 
         if (m_method == 0 || m_method == 1) {
             double minX = std::min(m_start->getX(), m_end.getX());
@@ -347,11 +339,6 @@ void CreateArcTool::draw(QPainter& painter, double scale) {
     QPen dashPen(Qt::white, 1.0, Qt::DashLine); dashPen.setCosmetic(true);
     QPen solidPen(QColor("#66D9EF"), 1.5, Qt::SolidLine); solidPen.setCosmetic(true);
 
-    // Маркеры кликнутых точек
-    for (const auto& p : m_clicks) {
-        drawPointMarker(painter, p, scale, Qt::yellow);
-    }
-
     if (m_method == 0) { // Center, Start, End
         if (m_clicks.size() >= 1) {
             Point center = m_clicks[0];
@@ -387,11 +374,6 @@ void CreateArcTool::draw(QPainter& painter, double scale) {
                 painter.setPen(solidPen);
                 QRectF rect(center.getX() - r, center.getY() - r, r * 2, r * 2);
                 painter.drawArc(rect, int(startAngle * 16), int(span * 16));
-                
-                // Конечная точка на окружности
-                Point endPt(center.getX() + r * std::cos(endAngle * M_PI / 180.0),
-                           center.getY() + r * std::sin(endAngle * M_PI / 180.0));
-                drawPointMarker(painter, endPt, scale, Qt::green);
             }
         }
     }
@@ -438,9 +420,6 @@ void CreateArcTool::draw(QPainter& painter, double scale) {
                 painter.setPen(solidPen);
                 QRectF rect(c.getX() - r, c.getY() - r, r * 2, r * 2);
                 painter.drawArc(rect, int(startAngle * 16), int(span * 16));
-                
-                // Маркер центра
-                drawPointMarker(painter, c, scale, QColor("#F92672"));
             }
         }
     }
@@ -511,11 +490,6 @@ void CreateEllipseTool::onMouseMove(const Point& worldPos, const Snapper& snappe
 void CreateEllipseTool::draw(QPainter& painter, double scale) {
     if (m_isSnapped) drawSnapMarker(painter, m_snapPoint, scale);
     QPen pen(Qt::white, 1.0, Qt::DashLine); pen.setCosmetic(true); painter.setPen(pen);
-
-    // Маркеры кликнутых точек
-    for (const auto& p : m_clicks) {
-        drawPointMarker(painter, p, scale, Qt::yellow);
-    }
 
     if (m_clicks.empty()) return;
     Point center = m_clicks[0];
@@ -606,9 +580,6 @@ void CreatePolygonTool::draw(QPainter& painter, double scale) {
         }
         painter.drawPolygon(poly);
         
-        // Маркер центра
-        drawPointMarker(painter, m_center.value(), scale, Qt::yellow);
-        
         // Линия от центра к курсору
         painter.drawLine(QPointF(m_center->getX(), m_center->getY()), 
                         QPointF(m_center->getX() + m_radius, m_center->getY()));
@@ -643,11 +614,6 @@ void CreateSplineTool::finish() {
 void CreateSplineTool::draw(QPainter& painter, double scale) {
     if (m_isSnapped) drawSnapMarker(painter, m_snapPoint, scale);
     QPen pen(Qt::white, 1.0, Qt::DashLine); pen.setCosmetic(true); painter.setPen(pen);
-    
-    // Маркеры всех точек
-    for (const auto& p : m_points) {
-        drawPointMarker(painter, p, scale, Qt::yellow);
-    }
     
     if (!m_points.empty()) {
         // Линии между точками

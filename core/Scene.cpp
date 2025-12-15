@@ -18,6 +18,9 @@ void Scene::addPrimitive(std::unique_ptr<Object> primitive)
 // Удаляет примитив из сцены по его указателю.
 void Scene::removePrimitive(Object* primitiveToRemove)
 {
+    if (!primitiveToRemove) {
+        return;  // Защита от nullptr
+    }
     m_primitives.erase(
         std::remove_if(m_primitives.begin(), m_primitives.end(),
             [primitiveToRemove](const std::unique_ptr<Object>& p) {

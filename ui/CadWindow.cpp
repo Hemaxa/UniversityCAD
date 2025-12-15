@@ -22,7 +22,11 @@ CadWindow::CadWindow(QWidget *parent)
     m_viewportPanel->setDrawingStrategies(&m_drawingStrategies);
 }
 
-CadWindow::~CadWindow() { delete m_scene; }
+CadWindow::~CadWindow() { 
+    // Очищаем выделенные объекты перед удалением сцены
+    m_selectedObjects.clear();
+    delete m_scene; 
+}
 
 void CadWindow::setupUi() {
     m_viewportPanel = new Viewport(this);
@@ -83,6 +87,9 @@ void CadWindow::onPrimitiveTypeSelected(PrimitiveType type, int methodIndex) {
 }
 
 void CadWindow::onObjectCreateRequested(Object* obj) {
+    if (!obj) {
+        return;  // Защита от nullptr
+    }
     m_propertiesPanel->applyCurrentStyleTo(obj);
     m_scene->addPrimitive(std::unique_ptr<Object>(obj));
     m_viewportPanel->update();
@@ -90,8 +97,23 @@ void CadWindow::onObjectCreateRequested(Object* obj) {
 }
 
 void CadWindow::onDeleteRequested() {
-    for(auto* obj : m_selectedObjects) m_scene->removePrimitive(obj);
-    onEscapePressed();
+    // Сохраняем копию указателей перед удалением, так как removePrimitive
+    // может инвалидировать указатели в m_selectedObjects
+    std::vector<Object*> objectsToDelete = m_selectedObjects;
+    
+    // Очищаем выделение перед удалением объектов
+    m_selectedObjects.clear();
+    m_viewportPanel->setSelectedObjects({});
+    
+    // Теперь безопасно удаляем объекты
+    for(auto* obj : objectsToDelete) {
+        if (obj) {
+            m_scene->removePrimitive(obj);
+        }
+    }
+    
+    // Обновляем UI
+    m_controlPanel->clearSelection();
     m_viewportPanel->update();
     emit sceneChanged(m_scene);
 }

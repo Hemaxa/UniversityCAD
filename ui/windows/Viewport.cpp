@@ -168,6 +168,8 @@ void Viewport::mousePressEvent(QMouseEvent *event) {
         if (event->button() == Qt::LeftButton) {
             m_currentTool->onMousePress(worldP, *m_snapper, m_camera->getZoomFactor());
             if (m_currentTool->isFinished()) {
+                // Безопасно: takeObject() возвращает unique_ptr, release() передает владение
+                // в onObjectCreateRequested, где объект сразу оборачивается в unique_ptr
                 emit objectCreated(m_currentTool->takeObject().release());
                 m_currentTool->reset();
             }
@@ -175,6 +177,8 @@ void Viewport::mousePressEvent(QMouseEvent *event) {
         } else if (event->button() == Qt::RightButton) {
             m_currentTool->finish();
             if (m_currentTool->isFinished()) {
+                // Безопасно: takeObject() возвращает unique_ptr, release() передает владение
+                // в onObjectCreateRequested, где объект сразу оборачивается в unique_ptr
                 emit objectCreated(m_currentTool->takeObject().release());
                 m_currentTool->reset();
             } else {

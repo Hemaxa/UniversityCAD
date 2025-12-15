@@ -43,7 +43,8 @@ static QPainterPath createWavyPath(const QPointF& start, const QPointF& end) {
 }
 
 // Создание линии с изломами по ГОСТ 2.303-68
-// Паттерн: прямой участок → излом (вверх или вниз) → прямой участок → излом...
+// Паттерн: прямой участок → излом вверх → прямой участок → излом вверх → ...
+// Изломы только с одной стороны (вверх)
 static QPainterPath createZigZagPath(const QPointF& start, const QPointF& end) {
     QPainterPath path;
     path.moveTo(start);
@@ -65,11 +66,7 @@ static QPainterPath createZigZagPath(const QPointF& start, const QPointF& end) {
     double straightLen = zigzag.straightLength; // Длина прямого участка
     double breakLen = zigzag.breakLength;    // Длина наклонного участка излома
     
-    // Полный период = прямой + излом (наклон вверх + наклон вниз)
-    double patternLen = straightLen + breakLen * 2.0;
-    
     double currentX = 0;
-    bool goUp = true; // Направление излома чередуется
     
     while (currentX < length) {
         // 1. Прямой участок
@@ -81,8 +78,8 @@ static QPainterPath createZigZagPath(const QPointF& start, const QPointF& end) {
         path.lineTo(t.map(QPointF(nextX, 0)));
         currentX = nextX;
         
-        // 2. Излом: наклон к пику
-        double peakY = goUp ? amp : -amp;
+        // 2. Излом: наклон вверх к пику
+        double peakY = amp; // Всегда вверх
         nextX = currentX + breakLen;
         if (nextX >= length) {
             path.lineTo(end);
@@ -99,8 +96,6 @@ static QPainterPath createZigZagPath(const QPointF& start, const QPointF& end) {
         }
         path.lineTo(t.map(QPointF(nextX, 0)));
         currentX = nextX;
-        
-        goUp = !goUp; // Следующий излом в противоположную сторону
     }
     
     // Убедимся, что линия доходит до конца
@@ -153,8 +148,30 @@ static void drawStyledEllipse(QPainter& painter, const QPointF& center, double r
         }
         painter.drawPath(path);
     } else {
-        // Standard (including Dashed via QPen)
-        painter.drawEllipse(center, rx, ry);
+        // For dashed lines and other styles, approximate ellipse with segments
+        // to ensure proper dash pattern rendering
+        bool needsSegmentation = (type == LineStyleType::Dashed || 
+                                 type == LineStyleType::DashDotThin || 
+                                 type == LineStyleType::DashDotThick || 
+                                 type == LineStyleType::DashDotDot || 
+                                 type == LineStyleType::Custom);
+        
+        if (needsSegmentation) {
+            int numSegments = std::max(40, int(std::max(rx, ry) / 2));
+            auto points = getEllipsePoints(center, rx, ry, numSegments);
+            QPainterPath path;
+            if(!points.empty()) {
+                path.moveTo(points[0]);
+                for(size_t i = 1; i < points.size(); ++i) {
+                    path.lineTo(points[i]);
+                }
+                path.closeSubpath();
+            }
+            painter.drawPath(path);
+        } else {
+            // Standard solid lines
+            painter.drawEllipse(center, rx, ry);
+        }
     }
 }
 
@@ -312,10 +329,11 @@ void ArcDraw::draw(QPainter& painter, Object* primitive, bool isSelected) const 
     setupPen(painter, obj, isSelected);
     
     LineStyleType type = obj->getLineStyle().type;
+    double r = obj->getRadius();
+    Point c = obj->getCenter();
+    
     if (type == LineStyleType::SolidWavy || type == LineStyleType::SolidZigZag) {
         QPainterPath styledPath;
-        double r = obj->getRadius();
-        Point c = obj->getCenter();
         
         // Аппроксимируем дугу отрезками для стилизации
         int steps = std::max(10, int(std::abs(obj->getSpanAngle()) / 5));
@@ -336,9 +354,34 @@ void ArcDraw::draw(QPainter& painter, Object* primitive, bool isSelected) const 
         }
         painter.drawPath(styledPath);
     } else {
-        double r = obj->getRadius();
-        QRectF rect(obj->getCenter().getX() - r, obj->getCenter().getY() - r, r * 2, r * 2);
-        painter.drawArc(rect, int(obj->getStartAngle() * 16), int(obj->getSpanAngle() * 16));
+        // For dashed lines and other styles, approximate arc with segments
+        // to ensure proper dash pattern rendering
+        bool needsSegmentation = (type == LineStyleType::Dashed || 
+                                 type == LineStyleType::DashDotThin || 
+                                 type == LineStyleType::DashDotThick || 
+                                 type == LineStyleType::DashDotDot || 
+                                 type == LineStyleType::Custom);
+        
+        if (needsSegmentation) {
+            QPainterPath path;
+            int steps = std::max(40, int(std::abs(obj->getSpanAngle()) / 2));
+            double step = obj->getSpanAngle() / steps;
+            double start = obj->getStartAngle();
+            
+            QPointF first(c.getX() + r * std::cos(start * M_PI/180), c.getY() + r * std::sin(start * M_PI/180));
+            path.moveTo(first);
+            
+            for(int i = 1; i <= steps; ++i) {
+                double a = start + i * step;
+                QPointF cur(c.getX() + r * std::cos(a * M_PI/180), c.getY() + r * std::sin(a * M_PI/180));
+                path.lineTo(cur);
+            }
+            painter.drawPath(path);
+        } else {
+            // Standard solid lines
+            QRectF rect(c.getX() - r, c.getY() - r, r * 2, r * 2);
+            painter.drawArc(rect, int(obj->getStartAngle() * 16), int(obj->getSpanAngle() * 16));
+        }
     }
 }
 
