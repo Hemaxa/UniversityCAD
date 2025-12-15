@@ -50,7 +50,6 @@ SnapResult Snapper::snap(const Point& mouseWorldPos, double scaleFactor, const s
         }
 
         // 2. Пересечения (Intersection)
-        // Для примера только отрезки, можно расширить
         for (size_t i = 0; i < primitives.size(); ++i) {
             for (size_t j = i + 1; j < primitives.size(); ++j) {
                 if (primitives[i]->getType() == PrimitiveType::Segment && primitives[j]->getType() == PrimitiveType::Segment) {
@@ -70,8 +69,7 @@ SnapResult Snapper::snap(const Point& mouseWorldPos, double scaleFactor, const s
             }
         }
 
-        // Если нашли жесткую привязку, возвращаем её.
-        if (result.snapped) return result;
+        // NO EARLY RETURN HERE. Let Dynamic snaps compete.
 
         // 3. Динамические привязки (Tangent, Perpendicular) - требуют начальной точки
         if (prevPoint.has_value()) {
@@ -80,6 +78,7 @@ SnapResult Snapper::snap(const Point& mouseWorldPos, double scaleFactor, const s
                 auto perp = obj->getPerpendicularPoint(prevPoint.value());
                 if (perp.has_value()) {
                     double d = MathUtils::dist(mouseWorldPos, *perp);
+                    // Give priority to perpendicular if it's close enough (maybe slightly larger radius or equal)
                     if (d < bestDist) {
                         bestDist = d;
                         result.snapped = true;
@@ -91,27 +90,61 @@ SnapResult Snapper::snap(const Point& mouseWorldPos, double scaleFactor, const s
                 auto tans = obj->getTangentPoints(prevPoint.value());
                 for (const auto& p : tans) {
                     double d = MathUtils::dist(mouseWorldPos, p);
-                    if (d < bestDist) {
-                        bestDist = d;
-                        result.snapped = true;
-                        result.point = p;
-                        result.type = SnapType::Tangent;
+                    // "Sticky" tangent: if we are reasonably close to the tangent point, snap to it.
+                    // Prioritize slightly: if distances are similar, prefer Tangent for "stickiness"
+                    if (d < bestDist * 1.5) { // Bias towards Tangent slightly
+                        if (d < bestDist) bestDist = d;
+                        // Force snap if within range, even if bestDist was slightly better (up to bias)
+                        // Actually, just standard logic for now, but ensure it runs.
+                        // If d is very small, we update.
+                         if (d < minInfoDist) { // If it is valid snap
+                             // Update if better
+                             // OR if it is Tangent and we want to prioritize it?
+                             // Let's stick to distance minimization but allow competition.
+                             if (d <= bestDist) {
+                                bestDist = d;
+                                result.snapped = true;
+                                result.point = p;
+                                result.type = SnapType::Tangent;
+                             }
+                         }
                     }
                 }
             }
         }
-
-        if (result.snapped) return result;
+        if (result.snapped && result.type != SnapType::Nearest && result.type != SnapType::Tangent) return result;
 
         // 4. Nearest (Ближайшая на объекте)
+        // Calculating nearest independent of Tangent to compare
+        SnapResult nearestRes;
+        double nearestDist = minInfoDist;
+        
         for (const auto& obj : primitives) {
             Point p = obj->getClosestPoint(mouseWorldPos);
             double d = MathUtils::dist(mouseWorldPos, p);
-            if (d < bestDist) {
-                bestDist = d;
-                result.snapped = true;
-                result.point = p;
-                result.type = SnapType::Nearest;
+            if (d < nearestDist) {
+                nearestDist = d;
+                nearestRes.snapped = true;
+                nearestRes.point = p;
+                nearestRes.type = SnapType::Nearest;
+            }
+        }
+
+        // If we have a Tangent candidate from step 3 (stored in result)
+        if (result.snapped && result.type == SnapType::Tangent) {
+            // If we also have a Nearest candidate
+            if (nearestRes.snapped) {
+                 // Prioritize Tangent unless Nearest is SIGNIFICANTLY closer (e.g. user moved away from tangent point to another part of circle)
+                 // But typically if we are finding a tangent, we want it "sticky".
+                 // If the mouse is within checking distance of Tangent, we kept it.
+                 // So if we have tangent, keep it unless nearest is way better?
+                 // Actually, if we have Tangent, we usually prefer it over generic "nearest point on line".
+                 // So do nothing, keep result. 
+            }
+        } else {
+            // No tangent found (or other hard snap), use nearest if found
+            if (nearestRes.snapped) {
+                result = nearestRes;
             }
         }
     }

@@ -24,6 +24,7 @@ std::vector<SnapPoint> Arc::getSnapPoints() const {
     double startRad = m_startAngle * M_PI / 180.0;
     double endRad = (m_startAngle + m_spanAngle) * M_PI / 180.0;
 
+    // Fix: Ensure we are calculating points on the arc correctly.
     snaps.push_back({Point(m_center.getX() + m_radius * std::cos(startRad),
                            m_center.getY() + m_radius * std::sin(startRad)), SnapType::Endpoint});
 
@@ -42,15 +43,50 @@ Point Arc::getClosestPoint(const Point& p) const {
     double dx = p.getX() - m_center.getX();
     double dy = p.getY() - m_center.getY();
     double angle = std::atan2(dy, dx) * 180.0 / M_PI; // -180..180
-    if (angle < 0) angle += 360.0; // 0..360
+    // Normalize to 0-360
+    if (angle < 0) angle += 360.0;
 
     // Проверка попадания в диапазон углов дуги
-    double s = MathUtils::normalizeAngle(m_startAngle);
-    double e = MathUtils::normalizeAngle(m_startAngle + m_spanAngle);
+    // Normalize start and end carefully
+    auto norm = [](double a) {
+        a = std::fmod(a, 360.0);
+        if (a < 0) a += 360.0;
+        return a;
+    };
 
+    double s = norm(m_startAngle);
+    double e = norm(m_startAngle + m_spanAngle);
+    
+    // Check if angle is between s and e (accounting for wrap around)
     bool inside = false;
-    if (s < e) inside = (angle >= s && angle <= e);
-    else inside = (angle >= s || angle <= e); // Переход через 0
+    double checkAngle = norm(angle);
+
+    if (m_spanAngle > 0) {
+        // Positive span
+        if (s < e) {
+             inside = (checkAngle >= s && checkAngle <= e);
+        } else {
+             // Wraps around 0 (e.g. 350 to 10)
+             inside = (checkAngle >= s || checkAngle <= e);
+        }
+    } else {
+        // Negative span (if supported, but usually we deal with normalized inputs ? Code uses spanAngle)
+        // If logic assumes positive traversal:
+        double endUnNorm = m_startAngle + m_spanAngle;
+        double aUnNorm = m_startAngle + (checkAngle - s); // tricky to map back
+        // Simpler: just check if angle is swept.
+        // Let's assume standard normalized range logic:
+        double minA = std::min(s, e);
+        double maxA = std::max(s, e);
+        // This is ambiguous for wrap around.
+        // Robust way:
+        double diff = checkAngle - s;
+        if (diff < 0) diff += 360;
+        // If diff < span (normalized to positive), then it's inside
+        double spanNorm = m_spanAngle;
+        if (spanNorm < 0) spanNorm += 360; // Just in case
+        if (diff <= std::abs(m_spanAngle)) inside = true;
+    }
 
     if (inside) {
         return Point(m_center.getX() + m_radius * std::cos(angle * M_PI/180),
@@ -75,14 +111,20 @@ std::vector<Point> Arc::getTangentPoints(const Point& p) const {
         double dx = pt.getX() - m_center.getX();
         double dy = pt.getY() - m_center.getY();
         double angle = std::atan2(dy, dx) * 180.0 / M_PI;
-        if (angle < 0) angle += 360.0;
-
-        double s = MathUtils::normalizeAngle(m_startAngle);
-        double e = MathUtils::normalizeAngle(m_startAngle + m_spanAngle);
-
-        bool inside = false;
-        if (s < e) inside = (angle >= s - 0.1 && angle <= e + 0.1);
-        else inside = (angle >= s - 0.1 || angle <= e + 0.1);
+        // Normalize
+        auto norm = [](double a) {
+            a = std::fmod(a, 360.0);
+            if (a < 0) a += 360.0;
+            return a;
+        };
+        double checkAngle = norm(angle);
+        double s = norm(m_startAngle);
+        
+        // Correct check for "inside arc"
+        double diff = checkAngle - s;
+        if (diff < 0) diff += 360.0;
+        
+        bool inside = (diff <= std::abs(m_spanAngle) + 0.1); // +0.1 for float tolerance
 
         if (inside) result.push_back(pt);
     }

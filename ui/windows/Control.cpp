@@ -129,14 +129,23 @@ QWidget* Control::createVariantPopup(LongPressButton* mainBtn, const std::vector
         btn->setProperty("isIconButton", true);
 
         int methodIndex = var.second;
-        // Исправление: захватываем methodIndex по значению
+        // Fix: Capture methodIndex by value. Correct order of operations.
         connect(btn, &QToolButton::clicked, this, [this, mainBtn, popup, type, methodIndex, var](){
             popup->close();
-            mainBtn->setChecked(true);
-            mainBtn->setIcon(QIcon(var.first));
+            
+            // First update the internal state
             m_activeSubMethods[type] = methodIndex;
-
-            // Сразу сообщаем о выборе нового типа/метода
+            
+            // Update UI
+            mainBtn->setIcon(QIcon(var.first));
+            
+            // Block signals to prevent double emission when setting checked state
+            mainBtn->blockSignals(true);
+            // Ensure main button is checked/active (this might trigger other signals, so do it after state update)
+            mainBtn->setChecked(true);
+            mainBtn->blockSignals(false);
+           
+            // Finally emit the signal with the CORRECT method index
             emit primitiveTypeSelected(type, methodIndex);
         });
         layout->addWidget(btn);

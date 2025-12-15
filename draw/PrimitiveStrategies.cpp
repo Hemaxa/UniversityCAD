@@ -73,23 +73,52 @@ static double getScale(const QPainter& p) {
     return p.transform().m11();
 }
 
+// Helper to get points on an ellipse
+static std::vector<QPointF> getEllipsePoints(const QPointF& center, double rx, double ry, int steps = 100) {
+    std::vector<QPointF> points;
+    double step = 2 * M_PI / steps;
+    for (int i = 0; i <= steps; ++i) {
+        double angle = i * step;
+        points.emplace_back(center.x() + rx * std::cos(angle), center.y() + ry * std::sin(angle));
+    }
+    return points;
+}
+
 static void drawStyledEllipse(QPainter& painter, const QPointF& center, double rx, double ry, const Object* obj) {
     LineStyleType type = obj->getLineStyle().type;
 
-    // Если стиль требует сложной геометрии (волна/зигзаг), делаем через путь
-    if (type == LineStyleType::SolidWavy || type == LineStyleType::SolidZigZag) {
+    if (type == LineStyleType::SolidWavy) {
+        // Approximate ellipse with segments and use wavy generator
+        auto points = getEllipsePoints(center, rx, ry, std::max(20, int(std::max(rx, ry) / 2)));
         QPainterPath path;
-        path.addEllipse(center, rx, ry);
-
-        // Тут сложнее: createWavyPath работает для отрезков.
-        // Для окружности нужно семплировать точки или использовать упрощение.
-        // Для простоты пока оставим стандартную отрисовку для волн на кругах,
-        // так как "развернуть" волну по кругу математически затратно для этого примера.
-        // НО, чтобы сработал dashed/dotted QPen, нужно убедиться что мы не используем drawPath(..., wavy).
-        // Стандартный dashed работает в painter.drawEllipse.
-        painter.drawEllipse(center, rx, ry);
+        double scale = getScale(painter);
+        if(!points.empty()) {
+            path.moveTo(points[0]);
+            for(size_t i = 0; i < points.size() - 1; ++i) {
+                // Generate wavy segment between points
+                // Note: creating individual wavy paths for short segments might look disjointed,
+                // but for a "mini CAD" this is a reasonable approximation without implementing a complex "wave along curve" shader/algo.
+                // Better approach: interpolate the wave along the perimeter distance.
+                
+                // Let's use the createWavyPath for each segment, but we need to ensure continuity.
+                // The current createWavyPath starts at 'start' and ends at 'end'.
+                path.connectPath(createWavyPath(points[i], points[i+1], scale));
+            }
+        }
+        painter.drawPath(path);
+    } else if (type == LineStyleType::SolidZigZag) {
+         auto points = getEllipsePoints(center, rx, ry, std::max(20, int(std::max(rx, ry) / 2)));
+        QPainterPath path;
+        double scale = getScale(painter);
+        if(!points.empty()) {
+            path.moveTo(points[0]);
+            for(size_t i = 0; i < points.size() - 1; ++i) {
+                path.connectPath(createZigZagPath(points[i], points[i+1], scale));
+            }
+        }
+        painter.drawPath(path);
     } else {
-        // Обычные типы (Solid, Dashed, etc) отлично рисуются стандартным методом с настроенным Pen
+        // Standard (including Dashed via QPen)
         painter.drawEllipse(center, rx, ry);
     }
 }
@@ -205,71 +234,120 @@ void SegmentDraw::draw(QPainter& painter, Object* primitive, bool isSelected) co
     }
 }
 
+// Helper for Rect/Poly lines
+static void drawStyledPath(QPainter& painter, const QPainterPath& path, const Object* obj) {
+    LineStyleType type = obj->getLineStyle().type;
+    if (type == LineStyleType::SolidWavy || type == LineStyleType::SolidZigZag) {
+        // Iterate elements and apply style to each segment
+        QPainterPath styledPath;
+        double scale = getScale(painter);
+        
+        for (int i = 0; i < path.elementCount() - 1; ++i) {
+             QPainterPath::Element e1 = path.elementAt(i);
+             QPainterPath::Element e2 = path.elementAt(i+1);
+             // Skip move to if purely moving (handled by loop logic: we connect segments)
+             if (e2.type == QPainterPath::MoveToElement) continue; 
+             
+             // If we have a gap (MoveTo), restart
+             if (e1.type == QPainterPath::MoveToElement) {
+                 styledPath.moveTo(e1.x, e1.y);
+             }
+
+             if (type == LineStyleType::SolidWavy) {
+                 styledPath.connectPath(createWavyPath(QPointF(e1.x, e1.y), QPointF(e2.x, e2.y), scale));
+             } else {
+                 styledPath.connectPath(createZigZagPath(QPointF(e1.x, e1.y), QPointF(e2.x, e2.y), scale));
+             }
+        }
+        // Handle closing if needed (not automatic for path elements unless we check isClosed)
+        // For simple rects/polygons, we might want to ensure closure.
+        // Assuming path is just a sequence of lines for now.
+        painter.drawPath(styledPath);
+    } else {
+        painter.drawPath(path);
+    }
+}
+
 void CircleDraw::draw(QPainter& painter, Object* primitive, bool isSelected) const {
     auto* obj = static_cast<Circle*>(primitive);
-    setupPen(painter, obj, isSelected); // setupPen настроит QPen (включая Dashed паттерны)
-    // drawEllipse корректно использует QPen, проблема была возможно в том, что пользователь ожидал Wavy на круге,
-    // либо в том, что setupPen неправильно обрабатывал типы.
-    // Если проблема была в том, что "другие типы линий" (пунктир) не применялись, то drawEllipse это исправит,
-    // при условии что setupPen вызывается.
-    painter.drawEllipse(QPointF(obj->getCenter().getX(), obj->getCenter().getY()),
-                        obj->getRadius(), obj->getRadius());
+    setupPen(painter, obj, isSelected); 
+    // Use the styled ellipse helper which supports Wavy/ZigZag
+    drawStyledEllipse(painter, QPointF(obj->getCenter().getX(), obj->getCenter().getY()), obj->getRadius(), obj->getRadius(), obj);
 }
 
 void ArcDraw::draw(QPainter& painter, Object* primitive, bool isSelected) const {
     auto* obj = static_cast<Arc*>(primitive);
     setupPen(painter, obj, isSelected);
-    double r = obj->getRadius();
-    QRectF rect(obj->getCenter().getX() - r, obj->getCenter().getY() - r, r * 2, r * 2);
-    // drawArc принимает углы в 1/16 градуса
-    painter.drawArc(rect, int(obj->getStartAngle() * 16), int(obj->getSpanAngle() * 16));
+    // For Arcs, Wavy/ZigZag is complex. Let's approximate if needed, or fallback.
+    // For now, standard arc rendering. If user needs Wavy Arc, we'd need getArcPoints.
+    // Let's implement basic support via path approximation if custom style.
+    LineStyleType type = obj->getLineStyle().type;
+    if (type == LineStyleType::SolidWavy || type == LineStyleType::SolidZigZag) {
+        QPainterPath path;
+        double r = obj->getRadius();
+        QRectF rect(obj->getCenter().getX() - r, obj->getCenter().getY() - r, r * 2, r * 2);
+        path.arcMoveTo(rect, obj->getStartAngle());
+        path.arcTo(rect, obj->getStartAngle(), obj->getSpanAngle());
+        
+        // Convert arc path to flattened subpaths for styling
+        QPainterPath styledPath;
+        double scale = getScale(painter);
+        // Flatten to small lines
+        QPainterPath flatParams = path; // Default flattening is usually fine or we can use toSubpathPolygons
+        // Simple manual approximation:
+        int steps = std::max(10, int(std::abs(obj->getSpanAngle()) / 5));
+        double step = obj->getSpanAngle() / steps;
+        double start = obj->getStartAngle();
+        Point c = obj->getCenter();
+        QPointF prev(c.getX() + r * std::cos(start * M_PI/180), c.getY() + r * std::sin(start * M_PI/180));
+        styledPath.moveTo(prev);
+        
+        for(int i=1; i<=steps; ++i) {
+            double a = start + i*step;
+            QPointF cur(c.getX() + r * std::cos(a * M_PI/180), c.getY() + r * std::sin(a * M_PI/180));
+             if (type == LineStyleType::SolidWavy)
+                 styledPath.connectPath(createWavyPath(prev, cur, scale));
+             else 
+                 styledPath.connectPath(createZigZagPath(prev, cur, scale));
+            prev = cur;
+        }
+        painter.drawPath(styledPath);
+    } else {
+        double r = obj->getRadius();
+        QRectF rect(obj->getCenter().getX() - r, obj->getCenter().getY() - r, r * 2, r * 2);
+        painter.drawArc(rect, int(obj->getStartAngle() * 16), int(obj->getSpanAngle() * 16));
+    }
 }
 
 void RectangleDraw::draw(QPainter& painter, Object* primitive, bool isSelected) const {
     auto* obj = static_cast<Rectangle*>(primitive);
     setupPen(painter, obj, isSelected);
 
-    // Rectangle хранит TopLeft (Min X, Max Y).
-    // QPainter drawRect(x,y,w,h) рисует от x,y вправо и ВНИЗ (в экранных координатах).
-    // Если Camera инвертирует Y (scale 1, -1), то +Y экрана это -Y мира.
-    // Чтобы нарисовать прямоугольник, который в мире имеет высоту H (вверх),
-    // нам нужно знать, как QPainter обрабатывает высоту.
-
-    // Надежнее всего нарисовать явно через координаты, чтобы не зависеть от знака высоты
     double minX = obj->getTopLeft().getX();
     double maxY = obj->getTopLeft().getY();
     double w = obj->getWidth();
     double h = obj->getHeight();
-
-    // Прямоугольник от (minX, maxY) вниз на h (до maxY - h).
-    // В мире: TopLeft = (minX, maxY). BottomRight = (minX+w, maxY-h).
-
-    // Вариант 1: Использовать QRectF(TopLeft, Size) и надеяться на трансформацию.
-    // Если scale(1, -1), то точка (0, 10) на экране (0, -10).
-    // Если мы скажем drawRect(0, 10, 10, 10).
-    // Это прямоугольник от (0,10) до (10, 20) в локальных координатах Pen.
-    // После трансф: Y инвертируется.
-
-    // Проще: задаем прямоугольник через верхний-левый и размеры так, чтобы он соответствовал математике.
-    // Если Rectangle::m_topLeft это "Верхний Левый" в мире (Max Y), то
-    // чтобы нарисовать его вниз (к Min Y), нужно использовать отрицательную высоту или сдвигать Y.
-
-    // Исправление бага "появляется выше":
-    // Мы рисуем от TopLeft.
-    // Если мы используем drawRect(x, y, w, h) -> это рисует в сторону увеличения Y координат системы QPainter.
-    // В мире (где Y вверх) увеличение Y - это вверх.
-    // Значит drawRect(x,y,w,h) нарисует прямоугольник ВВЕРХ от точки x,y.
-    // А наш Rectangle хранит ВЕРХНЮЮ точку. Значит нам надо рисовать ВНИЗ.
-
-    painter.drawRoundedRect(QRectF(minX, maxY - h, w, h), // Рисуем от нижней точки вверх
-                            obj->getCornerRadius(), obj->getCornerRadius());
+    
+    LineStyleType type = obj->getLineStyle().type;
+    if (type == LineStyleType::SolidWavy || type == LineStyleType::SolidZigZag) {
+         QPainterPath path;
+         path.moveTo(minX, maxY); // TL
+         path.lineTo(minX + w, maxY); // TR
+         path.lineTo(minX + w, maxY - h); // BR
+         path.lineTo(minX, maxY - h); // BL
+         path.lineTo(minX, maxY); // Close
+         drawStyledPath(painter, path, obj);
+    } else {
+        painter.drawRoundedRect(QRectF(minX, maxY - h, w, h),
+                                obj->getCornerRadius(), obj->getCornerRadius());
+    }
 }
 
 void EllipseDraw::draw(QPainter& painter, Object* primitive, bool isSelected) const {
     auto* obj = static_cast<Ellipse*>(primitive);
     setupPen(painter, obj, isSelected);
-    painter.drawEllipse(QPointF(obj->getCenter().getX(), obj->getCenter().getY()),
-                        obj->getRadiusX(), obj->getRadiusY());
+    drawStyledEllipse(painter, QPointF(obj->getCenter().getX(), obj->getCenter().getY()),
+                        obj->getRadiusX(), obj->getRadiusY(), obj);
 }
 
 void PolygonDraw::draw(QPainter& painter, Object* primitive, bool isSelected) const {
@@ -282,7 +360,6 @@ void PolygonDraw::draw(QPainter& painter, Object* primitive, bool isSelected) co
     double startAngle = M_PI / 2;
     double r = obj->getRadius();
 
-    // Если не вписанный, корректируем радиус, чтобы он был по грани
     if (!obj->isInscribed()) r = r / std::cos(M_PI / sides);
 
     for (int i = 0; i < sides; ++i) {
@@ -290,7 +367,16 @@ void PolygonDraw::draw(QPainter& painter, Object* primitive, bool isSelected) co
         poly << QPointF(obj->getCenter().getX() + r * std::cos(angle),
                         obj->getCenter().getY() + r * std::sin(angle));
     }
-    painter.drawPolygon(poly);
+    
+    LineStyleType type = obj->getLineStyle().type;
+     if (type == LineStyleType::SolidWavy || type == LineStyleType::SolidZigZag) {
+        QPainterPath path;
+        path.addPolygon(poly);
+        path.closeSubpath(); // Ensure closed
+        drawStyledPath(painter, path, obj);
+     } else {
+        painter.drawPolygon(poly);
+     }
 }
 
 void SplineDraw::draw(QPainter& painter, Object* primitive, bool isSelected) const {
@@ -302,16 +388,52 @@ void SplineDraw::draw(QPainter& painter, Object* primitive, bool isSelected) con
 
     QPainterPath path;
     path.moveTo(points[0].getX(), points[0].getY());
-    for (size_t i = 1; i < points.size(); ++i) {
-        path.lineTo(points[i].getX(), points[i].getY());
+    
+    // Smooth spline using cubic beziers (Catmull-Rom or simple cubic between points)
+    // Simple approach: Cubic to next point using control points based on neighbors
+    // Or just QPainterPath::cubicTo() with estimated control points.
+    // Let's implementation a basic Catmull-Rom spline conversion to Bezier:
+    
+    // Safe bounds check for loop
+    if (points.size() >= 2) {
+        for (size_t i = 0; i < points.size() - 1; ++i) {
+            Point p0 = (i == 0) ? points[0] : points[i-1];
+            Point p1 = points[i];
+            Point p2 = points[i+1];
+            // Safe access for p3
+            Point p3 = (i + 2 < points.size()) ? points[i+2] : p2;
+
+            double alpha = 0.5;
+
+            double d1 = std::hypot(p1.getX()-p0.getX(), p1.getY()-p0.getY());
+            double d2 = std::hypot(p2.getX()-p1.getX(), p2.getY()-p1.getY());
+            double d3 = std::hypot(p3.getX()-p2.getX(), p3.getY()-p2.getY());
+            
+            if (d1 < 1e-6) d1 = 1.0; if (d2 < 1e-6) d2 = 1.0; if (d3 < 1e-6) d3 = 1.0;
+            
+            double cp1x = p1.getX() + (p2.getX() - p0.getX()) / 6.0;
+            double cp1y = p1.getY() + (p2.getY() - p0.getY()) / 6.0;
+
+            double cp2x = p2.getX() - (p3.getX() - p1.getX()) / 6.0;
+            double cp2y = p2.getY() - (p3.getY() - p1.getY()) / 6.0;
+
+            path.cubicTo(cp1x, cp1y, cp2x, cp2y, p2.getX(), p2.getY());
+        }
     }
-    painter.drawPath(path);
+    
+    // Apply style to Spline
+    LineStyleType type = obj->getLineStyle().type;
+    if (type == LineStyleType::SolidWavy || type == LineStyleType::SolidZigZag) {
+         drawStyledPath(painter, path, obj);
+    } else {
+         painter.drawPath(path);
+    }
 
     // Рисуем опорные точки, если объект выделен
     if (isSelected) {
         painter.setBrush(QColor("#F92672"));
         painter.setPen(Qt::NoPen);
-        double s = 6.0 / getScale(painter); // Размер точек не зависит от зума
+        double s = 6.0 / getScale(painter); 
         for(const auto& p : points) {
             painter.drawEllipse(QPointF(p.getX(), p.getY()), s/2, s/2);
         }
