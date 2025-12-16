@@ -12,20 +12,21 @@ class QDoubleSpinBox;
 class QComboBox;
 class QButtonGroup;
 class QListWidget;
-class QCheckBox; // New
+class QCheckBox;
 class Scene;
 class Object;
 
-// =================================================================
-// Кастомная кнопка с поддержкой долгого нажатия
-// =================================================================
+// Кнопка с поддержкой долгого нажатия для отображения подменю.
 class LongPressButton : public QToolButton {
     Q_OBJECT
 public:
+    // Конструктор кнопки.
     explicit LongPressButton(QWidget* parent = nullptr);
+    // Устанавливает всплывающий виджет для долгого нажатия.
     void setPopupWidget(QWidget* popup);
 
 signals:
+    // Сигнал активации долгого нажатия.
     void longPressActivated();
 
 protected:
@@ -42,31 +43,43 @@ private:
     bool m_isLongPressHandled = false;
 };
 
+// Панель управления - содержит настройки сетки, выбор инструментов и список объектов.
 class Control : public QWidget
 {
     Q_OBJECT
 
 public:
+    // Конструктор панели управления.
     explicit Control(QWidget *parent = nullptr);
 
 public slots:
+    // Обновляет список объектов из сцены.
     void updateObjectList(const Scene* scene);
+    // Сбрасывает выделение в списке.
     void clearSelection();
+    // Сбрасывает выбранные инструменты.
     void resetTools();
+    // Устанавливает выбранные объекты в списке.
     void setSelectedObjects(const std::vector<Object*>& objects);
 
 signals:
+    // Сигнал изменения шага сетки.
     void gridStepChanged(int step);
+    // Сигнал изменения единиц углов.
     void angleUnitChanged(AngleUnit unit);
+    // Сигнал изменения системы координат.
     void coordinateSystemChanged(CoordinateSystemType type);
+    // Сигнал изменения шага зума.
     void zoomStepChanged(double step);
+    // Сигнал выбора объектов.
     void objectsSelected(const std::vector<Object*>& selectedObjects);
+    // Сигнал запроса на удаление.
     void deleteRequested();
-
-    // Новые сигналы для привязок
+    // Сигнал переключения привязки к сетке.
     void gridSnapToggled(bool enabled);
+    // Сигнал переключения привязки к объектам.
     void objectSnapToggled(bool enabled);
-
+    // Сигнал выбора типа примитива и метода.
     void primitiveTypeSelected(PrimitiveType type, int methodIndex);
 
 private slots:
@@ -76,6 +89,7 @@ private slots:
     void onPrimitiveToolClicked(int id);
 
 private:
+    // Создает всплывающее меню вариантов для кнопки.
     QWidget* createVariantPopup(LongPressButton* mainBtn,
                                 const std::vector<std::pair<QString, int>>& variants,
                                 PrimitiveType type);
@@ -86,7 +100,6 @@ private:
     QToolButton* m_cartesianBtn;
     QToolButton* m_polarBtn;
 
-    // Новые чекбоксы
     QCheckBox* m_gridSnapCheck;
     QCheckBox* m_objSnapCheck;
 
