@@ -77,4 +77,58 @@ inline Point projectPointOnLine(const Point& p, const Point& a, const Point& b) 
     return Point(a.getX() + t * (b.getX() - a.getX()), a.getY() + t * (b.getY() - a.getY()));
 }
 
+// Находит центр окружности, проходящей через две точки с заданным радиусом
+// Возвращает true, если решение существует, и выбирает центр ближе к referencePoint
+inline bool getCircleCenterFrom2PointsAndRadius(const Point& p1, const Point& p2, double radius, 
+                                                const Point& referencePoint, Point& center) {
+    double d = dist(p1, p2);
+    double d2 = d * d;
+    double r2 = radius * radius;
+    
+    // Проверяем, возможно ли решение (расстояние между точками не должно превышать 2*radius)
+    if (d > 2.0 * radius + EPSILON) {
+        return false;
+    }
+    
+    // Середина отрезка между p1 и p2
+    double midX = (p1.getX() + p2.getX()) / 2.0;
+    double midY = (p1.getY() + p2.getY()) / 2.0;
+    
+    // Расстояние от середины до центра окружности
+    double h2 = r2 - d2 / 4.0;
+    if (h2 < -EPSILON) {
+        return false; // Нет решения
+    }
+    
+    double h = std::sqrt(std::max(0.0, h2));
+    
+    // Направляющий вектор перпендикуляра к отрезку p1-p2
+    double dx = p2.getX() - p1.getX();
+    double dy = p2.getY() - p1.getY();
+    double len = std::sqrt(dx*dx + dy*dy);
+    
+    if (len < EPSILON) {
+        // Точки совпадают
+        center = p1;
+        return true;
+    }
+    
+    // Нормализуем и поворачиваем на 90 градусов
+    double perpX = -dy / len;
+    double perpY = dx / len;
+    
+    // Два возможных центра
+    Point center1(midX + h * perpX, midY + h * perpY);
+    Point center2(midX - h * perpX, midY - h * perpY);
+    
+    // Выбираем центр, ближайший к referencePoint
+    if (distSq(referencePoint, center1) < distSq(referencePoint, center2)) {
+        center = center1;
+    } else {
+        center = center2;
+    }
+    
+    return true;
+}
+
 }

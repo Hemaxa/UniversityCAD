@@ -286,43 +286,70 @@ void CreateArcTool::onMousePress(const Point& worldPos, const Snapper& snapper, 
             double r = MathUtils::dist(center, m_clicks[1]);
             double startAngle = std::atan2(m_clicks[1].getY() - center.getY(), m_clicks[1].getX() - center.getX()) * 180.0 / M_PI;
             double endAngle = std::atan2(m_clicks[2].getY() - center.getY(), m_clicks[2].getX() - center.getX()) * 180.0 / M_PI;
+            
+            // Вычисляем span (размах дуги) - разность между конечным и начальным углом
             double span = endAngle - startAngle;
-            // Нормализация угла для корректного отображения
-            while (span < 0) span += 360;
-            if (span > 360) span -= 360;
+            
+            // Нормализуем span в диапазон [-180, 180] для корректного отображения
+            // Если span > 180, идем в обратную сторону (отрицательный span)
+            if (span > 180.0) {
+                span = span - 360.0;
+            } else if (span < -180.0) {
+                span = span + 360.0;
+            }
+            
             m_result = std::make_unique<Arc>(center, r, startAngle, span);
             m_finished = true;
         }
     }
-    // 1: 3 Points (Start, Through, End)
+    // 1: 3 Points (Start, End, Radius) - первые две точки ограничивают дугу, третья задает радиус окружности
     else if (m_method == 1) {
         if (m_clicks.size() == 3) {
-            Point c; double r;
-            if (MathUtils::getCircleFrom3Points(m_clicks[0], m_clicks[1], m_clicks[2], c, r)) {
-                double startAngle = std::atan2(m_clicks[0].getY() - c.getY(), m_clicks[0].getX() - c.getX()) * 180.0 / M_PI;
-                double endAngle = std::atan2(m_clicks[2].getY() - c.getY(), m_clicks[2].getX() - c.getX()) * 180.0 / M_PI;
-                double midAngle = std::atan2(m_clicks[1].getY() - c.getY(), m_clicks[1].getX() - c.getX()) * 180.0 / M_PI;
+            // Первая и вторая точки - начало и конец дуги
+            Point start = m_clicks[0];
+            Point end = m_clicks[1];
+            // Третья точка задает радиус окружности (расстояние от первой точки до третьей = радиус)
+            Point radiusPoint = m_clicks[2];
+            
+            // Радиус = расстояние от первой точки до третьей точки
+            double radius = MathUtils::dist(start, radiusPoint);
+            
+            // Находим центр окружности, которая проходит через первую и вторую точку с заданным радиусом
+            Point center;
+            if (MathUtils::getCircleCenterFrom2PointsAndRadius(start, end, radius, radiusPoint, center)) {
+                // Вычисляем углы для начала и конца дуги
+                double startAngle = std::atan2(start.getY() - center.getY(), start.getX() - center.getX()) * 180.0 / M_PI;
+                double endAngle = std::atan2(end.getY() - center.getY(), end.getX() - center.getX()) * 180.0 / M_PI;
                 
-                // Нормализуем углы
-                auto norm = [](double a){ while(a < 0) a += 360; while(a >= 360) a -= 360; return a; };
-                double s = norm(startAngle), e = norm(endAngle), m = norm(midAngle);
+                // Нормализуем углы в диапазон [0, 360)
+                auto norm = [](double a){ 
+                    a = std::fmod(a, 360.0);
+                    if (a < 0) a += 360.0;
+                    return a;
+                };
+                double s = norm(startAngle);
+                double e = norm(endAngle);
                 
-                // Определяем направление дуги - проверяем, лежит ли средняя точка на дуге
+                // Вычисляем span (размах дуги)
                 double span = e - s;
-                if (span < 0) span += 360;
+                if (span < 0) span += 360.0;
                 
-                // Проверяем, находится ли средняя точка между начальной и конечной по дуге
-                double midDiff = m - s;
-                if (midDiff < 0) midDiff += 360;
+                // Проверяем направление: выбираем дугу, которая проходит ближе к третьей точке
+                double radiusAngle = norm(std::atan2(radiusPoint.getY() - center.getY(), 
+                                                     radiusPoint.getX() - center.getX()) * 180.0 / M_PI);
                 
-                // Если средняя точка не на дуге от s к e (по возрастанию угла), идём в другую сторону
-                if (midDiff > span) {
-                    span = span - 360;
+                // Если третья точка не попадает в диапазон дуги, используем обратную дугу
+                double radiusDiff = radiusAngle - s;
+                if (radiusDiff < 0) radiusDiff += 360.0;
+                
+                if (radiusDiff > span && radiusDiff < 360.0 - span) {
+                    span = span - 360.0;
                 }
                 
-                m_result = std::make_unique<Arc>(c, r, startAngle, span);
+                m_result = std::make_unique<Arc>(center, radius, startAngle, span);
                 m_finished = true;
             } else {
+                // Если решение невозможно (расстояние между точками > 2*radius), удаляем последний клик
                 m_clicks.pop_back();
             }
         }
@@ -367,13 +394,22 @@ void CreateArcTool::draw(QPainter& painter, double scale) {
                 double endAngle = std::atan2(m_cursorPos.getY() - center.getY(), 
                                              m_cursorPos.getX() - center.getX()) * 180.0 / M_PI;
                 double span = endAngle - startAngle;
-                while (span < 0) span += 360;
-                if (span > 360) span -= 360;
+                
+                // Нормализуем span в диапазон [-180, 180]
+                if (span > 180.0) {
+                    span = span - 360.0;
+                } else if (span < -180.0) {
+                    span = span + 360.0;
+                }
                 
                 // Рисуем саму дугу
+                // Qt использует углы в 1/16 градуса, и начало отсчета - 3 часа (90 градусов)
+                // Конвертируем: Qt angle = (90 - angle) * 16 для правильного отображения
                 painter.setPen(solidPen);
                 QRectF rect(center.getX() - r, center.getY() - r, r * 2, r * 2);
-                painter.drawArc(rect, int(startAngle * 16), int(span * 16));
+                int qtStartAngle = int((90.0 - startAngle) * 16);
+                int qtSpanAngle = int(span * 16);
+                painter.drawArc(rect, qtStartAngle, qtSpanAngle);
             }
         }
     }
@@ -388,38 +424,59 @@ void CreateArcTool::draw(QPainter& painter, double scale) {
         }
         
         if (m_clicks.size() == 2) {
-            Point c; double r;
-            if (MathUtils::getCircleFrom3Points(m_clicks[0], m_clicks[1], m_cursorPos, c, r)) {
+            // Первая и вторая точки - начало и конец дуги
+            Point start = m_clicks[0];
+            Point end = m_clicks[1];
+            // Курсор задает радиус окружности
+            Point radiusPoint = m_cursorPos;
+            
+            // Радиус = расстояние от первой точки до курсора
+            double radius = MathUtils::dist(start, radiusPoint);
+            
+            // Находим центр окружности, которая проходит через первую и вторую точку с заданным радиусом
+            Point center;
+            if (MathUtils::getCircleCenterFrom2PointsAndRadius(start, end, radius, radiusPoint, center)) {
                 // Пунктирная окружность
                 QPen circPen(Qt::gray, 0.5, Qt::DotLine); circPen.setCosmetic(true);
                 painter.setPen(circPen);
-                painter.drawEllipse(QPointF(c.getX(), c.getY()), r, r);
+                painter.drawEllipse(QPointF(center.getX(), center.getY()), radius, radius);
                 
-                // Вычисляем дугу
-                double startAngle = std::atan2(m_clicks[0].getY() - c.getY(), 
-                                               m_clicks[0].getX() - c.getX()) * 180.0 / M_PI;
-                double endAngle = std::atan2(m_cursorPos.getY() - c.getY(), 
-                                             m_cursorPos.getX() - c.getX()) * 180.0 / M_PI;
-                double midAngle = std::atan2(m_clicks[1].getY() - c.getY(), 
-                                             m_clicks[1].getX() - c.getX()) * 180.0 / M_PI;
+                // Вычисляем углы для начала и конца дуги
+                double startAngle = std::atan2(start.getY() - center.getY(), 
+                                               start.getX() - center.getX()) * 180.0 / M_PI;
+                double endAngle = std::atan2(end.getY() - center.getY(), 
+                                             end.getX() - center.getX()) * 180.0 / M_PI;
                 
-                auto norm = [](double a){ while(a < 0) a += 360; while(a >= 360) a -= 360; return a; };
-                double s = norm(startAngle), e = norm(endAngle), m = norm(midAngle);
+                // Нормализуем углы
+                auto norm = [](double a){ 
+                    a = std::fmod(a, 360.0);
+                    if (a < 0) a += 360.0;
+                    return a;
+                };
+                double s = norm(startAngle);
+                double e = norm(endAngle);
                 
+                // Вычисляем span
                 double span = e - s;
-                if (span < 0) span += 360;
+                if (span < 0) span += 360.0;
                 
-                double midDiff = m - s;
-                if (midDiff < 0) midDiff += 360;
+                // Проверяем направление через третью точку (курсор)
+                double radiusAngle = norm(std::atan2(radiusPoint.getY() - center.getY(), 
+                                                      radiusPoint.getX() - center.getX()) * 180.0 / M_PI);
+                double radiusDiff = radiusAngle - s;
+                if (radiusDiff < 0) radiusDiff += 360.0;
                 
-                if (midDiff > span) {
-                    span = span - 360;
+                // Если третья точка не попадает в диапазон дуги, идем в обратную сторону
+                if (radiusDiff > span && radiusDiff < 360.0 - span) {
+                    span = span - 360.0;
                 }
                 
                 // Рисуем дугу
                 painter.setPen(solidPen);
-                QRectF rect(c.getX() - r, c.getY() - r, r * 2, r * 2);
-                painter.drawArc(rect, int(startAngle * 16), int(span * 16));
+                QRectF rect(center.getX() - radius, center.getY() - radius, radius * 2, radius * 2);
+                int qtStartAngle = int((90.0 - startAngle) * 16);
+                int qtSpanAngle = int(span * 16);
+                painter.drawArc(rect, qtStartAngle, qtSpanAngle);
             }
         }
     }
@@ -615,12 +672,34 @@ void CreateSplineTool::draw(QPainter& painter, double scale) {
     if (m_isSnapped) drawSnapMarker(painter, m_snapPoint, scale);
     QPen pen(Qt::white, 1.0, Qt::DashLine); pen.setCosmetic(true); painter.setPen(pen);
     
-    if (!m_points.empty()) {
-        // Линии между точками
-        for(size_t i = 0; i < m_points.size() - 1; ++i)
-            painter.drawLine(QPointF(m_points[i].getX(), m_points[i].getY()), 
-                            QPointF(m_points[i+1].getX(), m_points[i+1].getY()));
-        painter.drawLine(QPointF(m_points.back().getX(), m_points.back().getY()), 
+    if (m_points.size() >= 2) {
+        // Строим сплайн через все точки + текущую позицию курсора
+        std::vector<Point> allPoints = m_points;
+        allPoints.push_back(m_currentPos);
+        
+        QPainterPath path;
+        path.moveTo(allPoints[0].getX(), allPoints[0].getY());
+        
+        // Smooth spline using cubic beziers (Catmull-Rom spline conversion)
+        for (size_t i = 0; i < allPoints.size() - 1; ++i) {
+            Point p0 = (i == 0) ? allPoints[0] : allPoints[i-1];
+            Point p1 = allPoints[i];
+            Point p2 = allPoints[i+1];
+            Point p3 = (i + 2 < allPoints.size()) ? allPoints[i+2] : p2;
+            
+            double cp1x = p1.getX() + (p2.getX() - p0.getX()) / 6.0;
+            double cp1y = p1.getY() + (p2.getY() - p0.getY()) / 6.0;
+            
+            double cp2x = p2.getX() - (p3.getX() - p1.getX()) / 6.0;
+            double cp2y = p2.getY() - (p3.getY() - p1.getY()) / 6.0;
+            
+            path.cubicTo(cp1x, cp1y, cp2x, cp2y, p2.getX(), p2.getY());
+        }
+        
+        painter.drawPath(path);
+    } else if (m_points.size() == 1) {
+        // Если только одна точка, рисуем линию к курсору
+        painter.drawLine(QPointF(m_points[0].getX(), m_points[0].getY()), 
                         QPointF(m_currentPos.getX(), m_currentPos.getY()));
     }
 }

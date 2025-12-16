@@ -13,6 +13,7 @@
 #include "Polygon.h"
 #include "Ellipse.h"
 #include "Spline.h"
+#include "MathUtils.h"
 
 #include <QPainter>
 #include <QMouseEvent>
@@ -21,6 +22,7 @@
 #include <QGridLayout>
 #include <QtMath>
 #include <QRubberBand>
+#include <limits>
 
 Viewport::Viewport(QWidget *parent) : QWidget(parent)
 {
@@ -189,6 +191,19 @@ void Viewport::mousePressEvent(QMouseEvent *event) {
     } else {
         if (event->button() == Qt::LeftButton) {
             if (getGizmoRect().contains(event->pos())) { m_camera->rotateLeft(); return; }
+            
+            // Проверяем, попал ли клик непосредственно по объекту
+            Object* clickedObject = pickObjectAtPoint(event->pos());
+            if (clickedObject) {
+                // Выделяем объект для редактирования только если клик попал по нему
+                m_selectedObjects = {clickedObject};
+                emit selectionChanged(m_selectedObjects);
+                update();
+                return;
+            }
+            
+            // Если не попали по объекту, начинаем выделение рамкой
+            // Выделение рамкой активируется при зажатии кнопки мыши
             m_isSelecting = true;
             m_rubberBandOrigin = event->pos();
             m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, QSize()));
@@ -231,6 +246,39 @@ void Viewport::mouseReleaseEvent(QMouseEvent *event) {
     } else if (event->button() == Qt::MiddleButton) {
         m_isPanning = false; setCursor(Qt::ArrowCursor);
     }
+}
+
+Object* Viewport::pickObjectAtPoint(const QPoint& screenPoint) {
+    if (!m_scene) return nullptr;
+    
+    QPointF worldF = screenToWorld(screenPoint);
+    Point worldP(worldF.x(), worldF.y());
+    
+    // Порог для попадания (в экранных координатах, конвертируем в мировые)
+    // Уменьшаем порог для более точного попадания
+    double threshold = 3.0 / m_camera->getZoomFactor(); // 3 пикселя в мировых координатах
+    
+    Object* closestObject = nullptr;
+    double minDist = std::numeric_limits<double>::max(); // Начинаем с максимального значения
+    
+    // Проверяем объекты в обратном порядке (последние нарисованные - сверху)
+    const auto& primitives = m_scene->getPrimitives();
+    for (auto it = primitives.rbegin(); it != primitives.rend(); ++it) {
+        const auto& obj = *it;
+        
+        // Получаем ближайшую точку на объекте
+        Point closest = obj->getClosestPoint(worldP);
+        double dist = MathUtils::dist(worldP, closest);
+        
+        // Сохраняем ближайший объект, если он ближе предыдущего
+        if (dist < minDist) {
+            minDist = dist;
+            closestObject = obj.get();
+        }
+    }
+    
+    // Возвращаем объект только если расстояние меньше порога (клик попал по объекту)
+    return (minDist <= threshold) ? closestObject : nullptr;
 }
 
 std::vector<Object*> Viewport::pickObjects(const QRect& screenRect) {

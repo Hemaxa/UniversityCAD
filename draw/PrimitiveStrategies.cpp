@@ -379,8 +379,12 @@ void ArcDraw::draw(QPainter& painter, Object* primitive, bool isSelected) const 
             painter.drawPath(path);
         } else {
             // Standard solid lines
+            // Qt использует углы в 1/16 градуса, начало отсчета - 3 часа (90 градусов)
+            // Конвертируем: Qt angle = (90 - angle) * 16
             QRectF rect(c.getX() - r, c.getY() - r, r * 2, r * 2);
-            painter.drawArc(rect, int(obj->getStartAngle() * 16), int(obj->getSpanAngle() * 16));
+            int qtStartAngle = int((90.0 - obj->getStartAngle()) * 16);
+            int qtSpanAngle = int(obj->getSpanAngle() * 16);
+            painter.drawArc(rect, qtStartAngle, qtSpanAngle);
         }
     }
 }

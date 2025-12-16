@@ -76,6 +76,9 @@ private:
 
     // Реализация выделения рамкой
     std::vector<Object*> pickObjects(const QRect& screenRect);
+    
+    // Поиск объекта по точке (для клика)
+    Object* pickObjectAtPoint(const QPoint& screenPoint);
 
     Scene* m_scene = nullptr;
     const std::map<PrimitiveType, std::unique_ptr<Draw>>* m_drawingStrategies = nullptr;
