@@ -20,7 +20,12 @@ StyleDialog::StyleDialog(const LineStyle& existingStyle, QWidget *parent)
     
     // Заполняем поля существующими значениями
     m_nameEdit->setText(existingStyle.name);
-    m_widthSpin->setValue(existingStyle.isMain ? 0.8 : 0.4);
+    // Используем кастомную толщину, если задана, иначе берём из isMain
+    if (existingStyle.customWidth > 0) {
+        m_widthSpin->setValue(existingStyle.customWidth);
+    } else {
+        m_widthSpin->setValue(existingStyle.isMain ? 0.8 : 0.4);
+    }
     m_dashSpin->setValue(existingStyle.dashLength);
     m_gapSpin->setValue(existingStyle.gapLength);
 }
@@ -74,13 +79,14 @@ LineStyle StyleDialog::getStyle() const
     LineStyle style;
     style.type = LineStyleType::Custom;
     style.name = m_nameEdit->text();
-    // style.width больше нет, не присваиваем его
     style.dashLength = m_dashSpin->value();
     style.gapLength = m_gapSpin->value();
 
-    // Используем значение спинбокса только для определения, является ли линия "основной"
+    // Сохраняем кастомную толщину
+    style.customWidth = m_widthSpin->value();
+    
+    // Определяем, является ли линия "основной" (толстой)
     style.isMain = (m_widthSpin->value() >= 0.5);
 
     return style;
 }
-

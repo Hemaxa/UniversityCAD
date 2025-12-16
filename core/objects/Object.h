@@ -18,6 +18,7 @@ struct LineStyle {
     double dashLength = 4.0;
     double gapLength = 2.0;
     bool isMain = true;
+    double customWidth = 0.0;  // Если > 0, переопределяет глобальную толщину
 };
 
 class Object

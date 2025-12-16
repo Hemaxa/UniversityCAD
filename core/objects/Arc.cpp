@@ -43,49 +43,38 @@ Point Arc::getClosestPoint(const Point& p) const {
     double dx = p.getX() - m_center.getX();
     double dy = p.getY() - m_center.getY();
     double angle = std::atan2(dy, dx) * 180.0 / M_PI; // -180..180
-    // Normalize to 0-360
-    if (angle < 0) angle += 360.0;
-
-    // Проверка попадания в диапазон углов дуги
-    // Normalize start and end carefully
+    
+    // Нормализация угла в [0, 360)
     auto norm = [](double a) {
         a = std::fmod(a, 360.0);
         if (a < 0) a += 360.0;
         return a;
     };
-
-    double s = norm(m_startAngle);
-    double e = norm(m_startAngle + m_spanAngle);
     
-    // Check if angle is between s and e (accounting for wrap around)
-    bool inside = false;
     double checkAngle = norm(angle);
-
-    if (m_spanAngle > 0) {
-        // Positive span
-        if (s < e) {
-             inside = (checkAngle >= s && checkAngle <= e);
+    double startNorm = norm(m_startAngle);
+    
+    // Проверка попадания в диапазон дуги с учётом направления
+    bool inside = false;
+    
+    if (m_spanAngle >= 0) {
+        // Положительный span (против часовой стрелки)
+        double endNorm = norm(m_startAngle + m_spanAngle);
+        if (startNorm <= endNorm) {
+            inside = (checkAngle >= startNorm && checkAngle <= endNorm);
         } else {
-             // Wraps around 0 (e.g. 350 to 10)
-             inside = (checkAngle >= s || checkAngle <= e);
+            // Wrap around 0 (например 350 -> 10)
+            inside = (checkAngle >= startNorm || checkAngle <= endNorm);
         }
     } else {
-        // Negative span (if supported, but usually we deal with normalized inputs ? Code uses spanAngle)
-        // If logic assumes positive traversal:
-        double endUnNorm = m_startAngle + m_spanAngle;
-        double aUnNorm = m_startAngle + (checkAngle - s); // tricky to map back
-        // Simpler: just check if angle is swept.
-        // Let's assume standard normalized range logic:
-        double minA = std::min(s, e);
-        double maxA = std::max(s, e);
-        // This is ambiguous for wrap around.
-        // Robust way:
-        double diff = checkAngle - s;
-        if (diff < 0) diff += 360;
-        // If diff < span (normalized to positive), then it's inside
-        double spanNorm = m_spanAngle;
-        if (spanNorm < 0) spanNorm += 360; // Just in case
-        if (diff <= std::abs(m_spanAngle)) inside = true;
+        // Отрицательный span (по часовой стрелке)
+        double endNorm = norm(m_startAngle + m_spanAngle);
+        if (endNorm <= startNorm) {
+            inside = (checkAngle <= startNorm && checkAngle >= endNorm);
+        } else {
+            // Wrap around 0
+            inside = (checkAngle <= startNorm || checkAngle >= endNorm);
+        }
     }
 
     if (inside) {

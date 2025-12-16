@@ -43,8 +43,8 @@ static QPainterPath createWavyPath(const QPointF& start, const QPointF& end) {
 }
 
 // Создание линии с изломами по ГОСТ 2.303-68
-// Паттерн: прямой участок → излом вверх → прямой участок → излом вверх → ...
-// Изломы только с одной стороны (вверх)
+// Паттерн: прямой участок → излом вниз → пересечение линии → излом вверх → обратно на линию
+// Изломы в обе стороны (сначала вниз, затем вверх)
 static QPainterPath createZigZagPath(const QPointF& start, const QPointF& end) {
     QPainterPath path;
     path.moveTo(start);
@@ -78,18 +78,26 @@ static QPainterPath createZigZagPath(const QPointF& start, const QPointF& end) {
         path.lineTo(t.map(QPointF(nextX, 0)));
         currentX = nextX;
         
-        // 2. Излом: наклон вверх к пику
-        double peakY = amp; // Всегда вверх
+        // 2. Излом вниз (первая половина)
+        nextX = currentX + breakLen / 2.0;
+        if (nextX >= length) {
+            path.lineTo(end);
+            break;
+        }
+        path.lineTo(t.map(QPointF(nextX, -amp)));
+        currentX = nextX;
+        
+        // 3. Проход через линию к верхней точке
         nextX = currentX + breakLen;
         if (nextX >= length) {
             path.lineTo(end);
             break;
         }
-        path.lineTo(t.map(QPointF(nextX, peakY)));
+        path.lineTo(t.map(QPointF(nextX, amp)));
         currentX = nextX;
         
-        // 3. Излом: наклон обратно к линии
-        nextX = currentX + breakLen;
+        // 4. Возврат обратно на линию
+        nextX = currentX + breakLen / 2.0;
         if (nextX >= length) {
             path.lineTo(end);
             break;
@@ -125,8 +133,9 @@ static void drawStyledEllipse(QPainter& painter, const QPointF& center, double r
     LineStyleType type = obj->getLineStyle().type;
 
     if (type == LineStyleType::SolidWavy) {
-        // Approximate ellipse with segments and use wavy generator
-        int numSegments = std::max(20, int(std::max(rx, ry) / 3));
+        // Аппроксимация эллипса сегментами для волнистой линии
+        // Используем больше сегментов для плавности при увеличении
+        int numSegments = std::max(72, int(std::max(rx, ry) * 2));
         auto points = getEllipsePoints(center, rx, ry, numSegments);
         QPainterPath path;
         if(!points.empty()) {
@@ -137,7 +146,8 @@ static void drawStyledEllipse(QPainter& painter, const QPointF& center, double r
         }
         painter.drawPath(path);
     } else if (type == LineStyleType::SolidZigZag) {
-        int numSegments = std::max(20, int(std::max(rx, ry) / 3));
+        // Больше сегментов для плавного изгиба линии с изломами
+        int numSegments = std::max(72, int(std::max(rx, ry) * 2));
         auto points = getEllipsePoints(center, rx, ry, numSegments);
         QPainterPath path;
         if(!points.empty()) {
@@ -187,11 +197,20 @@ static void setupPen(QPainter& painter, const Object* obj, bool isSelected) {
     pen.setCapStyle(Qt::FlatCap);
     pen.setCosmetic(true);
 
-    // Определяем базовую толщину из глобальных настроек
-    // Основные/толстые линии используют mainLineWidth, тонкие используют thinLineWidth
-    double baseWidth = global.thinLineWidth;  // По умолчанию тонкая линия
-    if (style.isMain || style.type == LineStyleType::SolidMain || style.type == LineStyleType::DashDotThick) {
-        baseWidth = global.mainLineWidth;  // Основная/толстая линия
+    // Определяем базовую толщину
+    double baseWidth;
+    
+    // Если стиль имеет кастомную толщину (> 0), используем её
+    if (style.customWidth > 0) {
+        baseWidth = style.customWidth;
+    } else {
+        // Иначе используем глобальные настройки
+        // Основные/толстые линии используют mainLineWidth, тонкие используют thinLineWidth
+        if (style.isMain || style.type == LineStyleType::SolidMain || style.type == LineStyleType::DashDotThick) {
+            baseWidth = global.mainLineWidth;
+        } else {
+            baseWidth = global.thinLineWidth;
+        }
     }
 
     // Применяем ОБЩИЙ глобальный масштаб толщины
@@ -337,7 +356,8 @@ void ArcDraw::draw(QPainter& painter, Object* primitive, bool isSelected) const 
         QPainterPath styledPath;
         
         // Аппроксимируем дугу отрезками для стилизации
-        int steps = std::max(10, int(std::abs(obj->getSpanAngle()) / 5));
+        // Больше сегментов для плавности при увеличении
+        int steps = std::max(36, int(std::abs(obj->getSpanAngle()) / 2));
         double step = obj->getSpanAngle() / steps;
         double start = obj->getStartAngle();
         
