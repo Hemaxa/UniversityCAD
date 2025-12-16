@@ -8,7 +8,8 @@
 #include "Polygon.h"
 #include "Spline.h"
 #include "StyleDialog.h"
-#include "MathUtils.h" // Важное исправление: подключаем общую математику
+#include "LineSettingsMenu.h"
+#include "MathUtils.h"
 
 #include <QVBoxLayout>
 #include <QGridLayout>
@@ -1030,8 +1031,9 @@ void Properties::showStyleMenu() {
             
             customIndex++;
         } else {
-            // Для стандартных стилей — обычное действие
-            menu.addAction(s.name, this, [this, s](){
+            // Для стандартных стилей — действие с иконкой
+            QString iconPath = LineSettingsMenu::getIconPath(s.type);
+            QAction* action = menu.addAction(QIcon(iconPath), s.name, this, [this, s](){
                 m_currentStyle = s;
                 m_stylePresetButton->setText(s.name);
             });

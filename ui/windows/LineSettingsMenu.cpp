@@ -57,6 +57,38 @@ void LineSettingsMenu::setupUi() {
     auto* widget = new QWidget();
     auto* layout = new QVBoxLayout(widget);
 
+    // --- Типы линий (с иконками) ---
+    auto* typesGroup = new QGroupBox("Типы линий");
+    auto* typesGrid = new QGridLayout(typesGroup);
+    typesGrid->setSpacing(8);
+    
+    auto addLineType = [&](int row, LineStyleType type, const QString& name) {
+        QString iconPath = getIconPath(type);
+        auto* iconLabel = new QLabel();
+        iconLabel->setFixedSize(40, 20);
+        iconLabel->setStyleSheet("background-color: transparent;");
+        QIcon icon(iconPath);
+        if (!icon.isNull()) {
+            iconLabel->setPixmap(icon.pixmap(40, 20));
+        }
+        auto* nameLabel = new QLabel(name);
+        nameLabel->setStyleSheet("font-weight: normal; color: #F0F0F0;");
+        
+        typesGrid->addWidget(iconLabel, row, 0);
+        typesGrid->addWidget(nameLabel, row, 1);
+    };
+    
+    addLineType(0, LineStyleType::SolidMain, "Сплошная основная");
+    addLineType(1, LineStyleType::SolidThin, "Сплошная тонкая");
+    addLineType(2, LineStyleType::Dashed, "Штриховая");
+    addLineType(3, LineStyleType::DashDotThin, "Штрихпунктирная тонкая");
+    addLineType(4, LineStyleType::DashDotThick, "Штрихпунктирная толстая");
+    addLineType(5, LineStyleType::DashDotDot, "Штрихпунктирная с двумя точками");
+    addLineType(6, LineStyleType::SolidWavy, "Волнистая");
+    addLineType(7, LineStyleType::SolidZigZag, "С изломами");
+    
+    layout->addWidget(typesGroup);
+
     // --- Глобальные множители (ОБЩИЕ ДЛЯ ВСЕХ) ---
     auto* globalGroup = new QGroupBox("Общие настройки (для всех линий)");
     auto* globalForm = new QFormLayout(globalGroup);
@@ -118,13 +150,13 @@ void LineSettingsMenu::setupUi() {
         labelLayout->setContentsMargins(0,0,0,0);
         labelLayout->setSpacing(6);
         
-        // Иконка (если существует)
+        // Иконка (используем QIcon для корректного рендеринга SVG)
         QString iconPath = getIconPath(type);
         auto* iconLabel = new QLabel();
-        iconLabel->setFixedSize(24, 16);
-        QPixmap pixmap(iconPath);
-        if (!pixmap.isNull()) {
-            iconLabel->setPixmap(pixmap.scaled(24, 16, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        iconLabel->setFixedSize(32, 16);
+        QIcon icon(iconPath);
+        if (!icon.isNull()) {
+            iconLabel->setPixmap(icon.pixmap(32, 16));
         }
         labelLayout->addWidget(iconLabel);
         labelLayout->addWidget(new QLabel(name));
