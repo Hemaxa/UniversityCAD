@@ -14,23 +14,23 @@
 QString LineSettingsMenu::getIconPath(LineStyleType type) {
     switch (type) {
         case LineStyleType::SolidMain:
-            return ":/icons/line_solid_main.svg";
+            return ":/icons/line-solid-main.svg";
         case LineStyleType::SolidThin:
-            return ":/icons/line_solid_thin.svg";
+            return ":/icons/line-solid-thin.svg";
         case LineStyleType::SolidWavy:
-            return ":/icons/line_wavy.svg";
+            return ":/icons/line-wavy.svg";
         case LineStyleType::SolidZigZag:
-            return ":/icons/line_zigzag.svg";
+            return ":/icons/line-zigzag.svg";
         case LineStyleType::Dashed:
-            return ":/icons/line_dashed.svg";
+            return ":/icons/line-dashed.svg";
         case LineStyleType::DashDotThin:
-            return ":/icons/line_dashdot_thin.svg";
+            return ":/icons/line-dashdot-thin.svg";
         case LineStyleType::DashDotThick:
-            return ":/icons/line_dashdot_thick.svg";
+            return ":/icons/line-dashdot-thick.svg";
         case LineStyleType::DashDotDot:
-            return ":/icons/line_dashdotdot.svg";
+            return ":/icons/line-dashdotdot.svg";
         case LineStyleType::Custom:
-            return ":/icons/line_custom.svg";
+            return ":/icons/line-custom.svg";
         default:
             return "";
     }

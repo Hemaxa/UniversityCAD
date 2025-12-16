@@ -21,5 +21,13 @@
         <file>icons/rectangle-3.svg</file>
         <file>icons/spline.svg</file>
         <file>icons/settings.svg</file>
+        <file>icons/line-dashdot-thick.svg</file>
+        <file>icons/line-dashdot-thin.svg</file>
+        <file>icons/line-dashdotdot.svg</file>
+        <file>icons/line-dashed.svg</file>
+        <file>icons/line-solid-main.svg</file>
+        <file>icons/line-solid-thin.svg</file>
+        <file>icons/line-wavy.svg</file>
+        <file>icons/line-zigzag.svg</file>
     </qresource>
 </RCC>

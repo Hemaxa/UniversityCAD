@@ -47,6 +47,7 @@ private slots:
     void onDeleteCustomStyle(int index);
     void onAddSplinePoint();
     void onRemoveSplinePoint();
+    void clearAllSplinePoints();
 
 private:
     QWidget* createPlaceholder();

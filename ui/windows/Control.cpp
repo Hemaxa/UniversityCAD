@@ -52,7 +52,7 @@ Control::Control(QWidget *parent) : QWidget(parent)
     auto* sceneLayout = new QGridLayout(sceneGroup);
     m_gridStepSpinBox = new QSpinBox(); m_gridStepSpinBox->setRange(10, 200); m_gridStepSpinBox->setValue(50);
     sceneLayout->addWidget(new QLabel("Сетка:"), 0, 0); sceneLayout->addWidget(m_gridStepSpinBox, 0, 1);
-    m_zoomStepSpinBox = new QDoubleSpinBox(); m_zoomStepSpinBox->setRange(1.05, 2.0); m_zoomStepSpinBox->setValue(1.25);
+    m_zoomStepSpinBox = new QDoubleSpinBox(); m_zoomStepSpinBox->setRange(1.05, 2.0); m_zoomStepSpinBox->setSingleStep(0.05); m_zoomStepSpinBox->setValue(1.25);
     sceneLayout->addWidget(new QLabel("Зум:"), 0, 2); sceneLayout->addWidget(m_zoomStepSpinBox, 0, 3);
     m_angleUnitComboBox = new QComboBox(); m_angleUnitComboBox->addItem("Deg", 0); m_angleUnitComboBox->addItem("Rad", 1);
     sceneLayout->addWidget(new QLabel("Угол:"), 1, 0); sceneLayout->addWidget(m_angleUnitComboBox, 1, 1);
@@ -129,7 +129,7 @@ QWidget* Control::createVariantPopup(LongPressButton* mainBtn, const std::vector
         btn->setProperty("isIconButton", true);
 
         int methodIndex = var.second;
-        // Fix: Capture methodIndex by value. Correct order of operations.
+        // Обработчик выбора варианта инструмента
         connect(btn, &QToolButton::clicked, this, [this, mainBtn, popup, type, methodIndex, var](){
             popup->close();
             

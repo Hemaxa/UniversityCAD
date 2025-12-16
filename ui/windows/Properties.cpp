@@ -597,10 +597,16 @@ void Properties::onAddSplinePoint() {
 }
 
 void Properties::onRemoveSplinePoint() {
+    // Не удаляем если осталось 2 или меньше точек (минимум для сплайна)
     if (m_splineSpinBoxes.size() <= 2) return;
+    
+    // Проверяем наличие элементов в m_coordLabels
+    auto& labels = m_coordLabels[PrimitiveType::Spline];
+    if (labels.size() < 2) return;
+    
     auto pair = m_splineSpinBoxes.back();
-    auto l1 = m_coordLabels[PrimitiveType::Spline][m_coordLabels[PrimitiveType::Spline].size() - 2];
-    auto l2 = m_coordLabels[PrimitiveType::Spline].back();
+    auto* l1 = labels[labels.size() - 2];
+    auto* l2 = labels.back();
 
     m_splinePointsLayout->removeWidget(pair.first); delete pair.first;
     m_splinePointsLayout->removeWidget(pair.second); delete pair.second;
@@ -608,8 +614,26 @@ void Properties::onRemoveSplinePoint() {
     m_splinePointsLayout->removeWidget(l2); delete l2;
 
     m_splineSpinBoxes.pop_back();
-    m_coordLabels[PrimitiveType::Spline].pop_back();
-    m_coordLabels[PrimitiveType::Spline].pop_back();
+    labels.pop_back();
+    labels.pop_back();
+}
+
+// Вспомогательная функция для очистки всех точек сплайна
+void Properties::clearAllSplinePoints() {
+    auto& labels = m_coordLabels[PrimitiveType::Spline];
+    
+    // Удаляем все виджеты точек
+    for (auto& pair : m_splineSpinBoxes) {
+        m_splinePointsLayout->removeWidget(pair.first); delete pair.first;
+        m_splinePointsLayout->removeWidget(pair.second); delete pair.second;
+    }
+    m_splineSpinBoxes.clear();
+    
+    // Удаляем все метки
+    for (auto* lbl : labels) {
+        m_splinePointsLayout->removeWidget(lbl); delete lbl;
+    }
+    labels.clear();
 }
 
 void Properties::applyCurrentStyleTo(Object* obj) const {
@@ -755,7 +779,7 @@ void Properties::populateFields(Object* obj) {
     case PrimitiveType::Spline: {
         auto* sp = static_cast<Spline*>(obj);
         const auto& pts = sp->getPoints();
-        while(!m_splineSpinBoxes.empty()) onRemoveSplinePoint();
+        clearAllSplinePoints();  // Очищаем все точки безопасно
         for(const auto& p : pts) {
             onAddSplinePoint();
             m_splineSpinBoxes.back().first->setValue(p.getX());

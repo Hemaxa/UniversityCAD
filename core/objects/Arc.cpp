@@ -24,7 +24,7 @@ std::vector<SnapPoint> Arc::getSnapPoints() const {
     double startRad = m_startAngle * M_PI / 180.0;
     double endRad = (m_startAngle + m_spanAngle) * M_PI / 180.0;
 
-    // Fix: Ensure we are calculating points on the arc correctly.
+    // Точки начала и конца дуги
     snaps.push_back({Point(m_center.getX() + m_radius * std::cos(startRad),
                            m_center.getY() + m_radius * std::sin(startRad)), SnapType::Endpoint});
 
