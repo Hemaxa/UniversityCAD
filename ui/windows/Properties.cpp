@@ -974,12 +974,46 @@ void Properties::onColorButtonClicked() {
 
 void Properties::showStyleMenu() {
     QMenu menu(this);
-    for(const auto& s : m_availableStyles) {
-        menu.addAction(s.name, this, [this, s](){
-            m_currentStyle = s;
-            m_stylePresetButton->setText(s.name);
-        });
+    
+    // Индекс для пользовательских стилей
+    int customIndex = 0;
+    
+    for(size_t i = 0; i < m_availableStyles.size(); ++i) {
+        const auto& s = m_availableStyles[i];
+        
+        if (s.type == LineStyleType::Custom) {
+            // Для пользовательских стилей создаём подменю с действиями
+            QMenu* subMenu = menu.addMenu(s.name);
+            
+            // Выбрать стиль
+            subMenu->addAction("Выбрать", this, [this, s](){
+                m_currentStyle = s;
+                m_stylePresetButton->setText(s.name);
+            });
+            
+            subMenu->addSeparator();
+            
+            // Редактировать стиль
+            int idx = i;
+            subMenu->addAction("Редактировать", this, [this, idx](){
+                onEditCustomStyle(idx);
+            });
+            
+            // Удалить стиль
+            subMenu->addAction("Удалить", this, [this, idx](){
+                onDeleteCustomStyle(idx);
+            });
+            
+            customIndex++;
+        } else {
+            // Для стандартных стилей — обычное действие
+            menu.addAction(s.name, this, [this, s](){
+                m_currentStyle = s;
+                m_stylePresetButton->setText(s.name);
+            });
+        }
     }
+    
     menu.addSeparator();
     menu.addAction("Добавить...", this, &Properties::onAddCustomStyle);
     menu.exec(QCursor::pos());
@@ -988,4 +1022,32 @@ void Properties::showStyleMenu() {
 void Properties::onAddCustomStyle() {
     StyleDialog dlg(this);
     if(dlg.exec()) m_availableStyles.push_back(dlg.getStyle());
+}
+
+void Properties::onEditCustomStyle(int index) {
+    if (index < 0 || index >= static_cast<int>(m_availableStyles.size())) return;
+    
+    StyleDialog dlg(m_availableStyles[index], this);
+    if (dlg.exec()) {
+        m_availableStyles[index] = dlg.getStyle();
+        // Если текущий стиль был изменён, обновляем кнопку
+        if (m_currentStyle.name == m_availableStyles[index].name) {
+            m_currentStyle = m_availableStyles[index];
+            m_stylePresetButton->setText(m_currentStyle.name);
+        }
+    }
+}
+
+void Properties::onDeleteCustomStyle(int index) {
+    if (index < 0 || index >= static_cast<int>(m_availableStyles.size())) return;
+    
+    // Если удаляемый стиль — текущий, переключаемся на первый стандартный
+    if (m_currentStyle.name == m_availableStyles[index].name) {
+        if (!m_availableStyles.empty()) {
+            m_currentStyle = m_availableStyles[0];
+            m_stylePresetButton->setText(m_currentStyle.name);
+        }
+    }
+    
+    m_availableStyles.erase(m_availableStyles.begin() + index);
 }

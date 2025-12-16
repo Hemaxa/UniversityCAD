@@ -7,6 +7,34 @@
 #include <QDoubleSpinBox>
 #include <QLabel>
 #include <QGroupBox>
+#include <QIcon>
+#include <QPixmap>
+
+// Статический метод для получения пути к иконке типа линии
+QString LineSettingsMenu::getIconPath(LineStyleType type) {
+    switch (type) {
+        case LineStyleType::SolidMain:
+            return ":/icons/line_solid_main.svg";
+        case LineStyleType::SolidThin:
+            return ":/icons/line_solid_thin.svg";
+        case LineStyleType::SolidWavy:
+            return ":/icons/line_wavy.svg";
+        case LineStyleType::SolidZigZag:
+            return ":/icons/line_zigzag.svg";
+        case LineStyleType::Dashed:
+            return ":/icons/line_dashed.svg";
+        case LineStyleType::DashDotThin:
+            return ":/icons/line_dashdot_thin.svg";
+        case LineStyleType::DashDotThick:
+            return ":/icons/line_dashdot_thick.svg";
+        case LineStyleType::DashDotDot:
+            return ":/icons/line_dashdotdot.svg";
+        case LineStyleType::Custom:
+            return ":/icons/line_custom.svg";
+        default:
+            return "";
+    }
+}
 
 LineSettingsMenu::LineSettingsMenu(QWidget* parent) : QMenu(parent) {
     setTitle("Настройки линий");
@@ -32,6 +60,22 @@ void LineSettingsMenu::setupUi() {
     // --- Глобальные множители (ОБЩИЕ ДЛЯ ВСЕХ) ---
     auto* globalGroup = new QGroupBox("Общие настройки (для всех линий)");
     auto* globalForm = new QFormLayout(globalGroup);
+
+    // Толщина основной линии (s): 0.5-1.4 мм, по умолчанию 0.8 мм
+    auto* mainWidth = createDoubleSpin(GlobalSettings::instance().mainLineWidth, 0.5, 1.4, 0.1);
+    mainWidth->setSuffix(" мм");
+    connect(mainWidth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [](double v){ 
+        GlobalSettings::instance().mainLineWidth = v; 
+    });
+    globalForm->addRow("Толщина основной (s):", mainWidth);
+    
+    // Толщина тонкой линии (s/2): 0.25-0.7 мм, по умолчанию 0.4 мм
+    auto* thinWidth = createDoubleSpin(GlobalSettings::instance().thinLineWidth, 0.25, 0.7, 0.05);
+    thinWidth->setSuffix(" мм");
+    connect(thinWidth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [](double v){ 
+        GlobalSettings::instance().thinLineWidth = v; 
+    });
+    globalForm->addRow("Толщина тонкой (s/2):", thinWidth);
 
     auto* wScale = createDoubleSpin(GlobalSettings::instance().globalWidthScale, 0.1, 10.0, 0.1);
     connect(wScale, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [](double v){ 
@@ -68,7 +112,24 @@ void LineSettingsMenu::setupUi() {
         rowLayout->addWidget(new QLabel("Штрих:")); rowLayout->addWidget(dash);
         rowLayout->addWidget(new QLabel("Пробел:")); rowLayout->addWidget(gap);
 
-        paramsLayout->addRow(name, rowWidget);
+        // Создаём метку с иконкой и текстом
+        auto* labelWidget = new QWidget();
+        auto* labelLayout = new QHBoxLayout(labelWidget);
+        labelLayout->setContentsMargins(0,0,0,0);
+        labelLayout->setSpacing(6);
+        
+        // Иконка (если существует)
+        QString iconPath = getIconPath(type);
+        auto* iconLabel = new QLabel();
+        iconLabel->setFixedSize(24, 16);
+        QPixmap pixmap(iconPath);
+        if (!pixmap.isNull()) {
+            iconLabel->setPixmap(pixmap.scaled(24, 16, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        }
+        labelLayout->addWidget(iconLabel);
+        labelLayout->addWidget(new QLabel(name));
+        
+        paramsLayout->addRow(labelWidget, rowWidget);
     };
 
     addParamRow("Штриховая:", LineStyleType::Dashed);

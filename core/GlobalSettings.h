@@ -33,6 +33,12 @@ public:
     // Глобальные множители
     double globalWidthScale = 1.0;       // Общий масштаб толщины для ВСЕХ линий
     double globalLinetypeScale = 1.0;    // Влияет на размер штрихов
+    
+    // Толщина линий по ГОСТ 2.303-68
+    // Основная толстая линия (s): 0.5-1.4 мм, по умолчанию 0.8 мм
+    double mainLineWidth = 0.8;
+    // Тонкие линии (s/2): 0.25-0.7 мм, по умолчанию 0.4 мм
+    double thinLineWidth = 0.4;
 
     // Параметры стандартных типов
     std::map<LineStyleType, StyleParams> styleParams;

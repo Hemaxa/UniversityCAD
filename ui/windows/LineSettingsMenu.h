@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QMenu>
+#include <QString>
 #include "GlobalSettings.h"
 
 class QDoubleSpinBox;
@@ -9,6 +10,9 @@ class LineSettingsMenu : public QMenu {
     Q_OBJECT
 public:
     explicit LineSettingsMenu(QWidget* parent = nullptr);
+    
+    // Возвращает путь к иконке для типа линии (для использования в QIcon)
+    static QString getIconPath(LineStyleType type);
 
 signals:
     void settingsChanged();

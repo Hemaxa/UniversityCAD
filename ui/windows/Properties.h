@@ -43,6 +43,8 @@ private slots:
     void onColorButtonClicked();
     void showStyleMenu();
     void onAddCustomStyle();
+    void onEditCustomStyle(int index);
+    void onDeleteCustomStyle(int index);
     void onAddSplinePoint();
     void onRemoveSplinePoint();
 

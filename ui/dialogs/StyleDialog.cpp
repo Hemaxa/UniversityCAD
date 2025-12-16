@@ -6,16 +6,35 @@
 #include <QDoubleSpinBox>
 #include <QLabel>
 
+// Конструктор для создания нового стиля
 StyleDialog::StyleDialog(QWidget *parent) : QDialog(parent)
 {
-    setWindowTitle("Новый стиль линии");
+    setupUi(false);
+}
+
+// Конструктор для редактирования существующего стиля
+StyleDialog::StyleDialog(const LineStyle& existingStyle, QWidget *parent) 
+    : QDialog(parent), m_existingStyle(existingStyle)
+{
+    setupUi(true);
+    
+    // Заполняем поля существующими значениями
+    m_nameEdit->setText(existingStyle.name);
+    m_widthSpin->setValue(existingStyle.isMain ? 0.8 : 0.4);
+    m_dashSpin->setValue(existingStyle.dashLength);
+    m_gapSpin->setValue(existingStyle.gapLength);
+}
+
+void StyleDialog::setupUi(bool isEditing)
+{
+    setWindowTitle(isEditing ? "Редактировать стиль линии" : "Новый стиль линии");
     setModal(true);
     resize(300, 200);
 
     auto* layout = new QVBoxLayout(this);
     auto* form = new QFormLayout();
 
-    m_nameEdit = new QLineEdit("Мой стиль");
+    m_nameEdit = new QLineEdit(isEditing ? "" : "Мой стиль");
 
     // m_widthSpin оставляем для логики isMain, хотя самой ширины в LineStyle нет
     m_widthSpin = new QDoubleSpinBox();
@@ -39,7 +58,7 @@ StyleDialog::StyleDialog(QWidget *parent) : QDialog(parent)
     layout->addLayout(form);
 
     auto* btnLayout = new QHBoxLayout();
-    auto* okBtn = new QPushButton("Создать");
+    auto* okBtn = new QPushButton(isEditing ? "Сохранить" : "Создать");
     auto* cancelBtn = new QPushButton("Отмена");
 
     connect(okBtn, &QPushButton::clicked, this, &StyleDialog::accept);
@@ -64,3 +83,4 @@ LineStyle StyleDialog::getStyle() const
 
     return style;
 }
+

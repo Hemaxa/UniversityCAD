@@ -187,15 +187,16 @@ static void setupPen(QPainter& painter, const Object* obj, bool isSelected) {
     pen.setCapStyle(Qt::FlatCap);
     pen.setCosmetic(true);
 
-    // Определяем базовую толщину: 2.0 для основных/толстых, 1.0 для тонких
-    double baseWidth = 1.0;
+    // Определяем базовую толщину из глобальных настроек
+    // Основные/толстые линии используют mainLineWidth, тонкие используют thinLineWidth
+    double baseWidth = global.thinLineWidth;  // По умолчанию тонкая линия
     if (style.isMain || style.type == LineStyleType::SolidMain || style.type == LineStyleType::DashDotThick) {
-        baseWidth = 2.0;
+        baseWidth = global.mainLineWidth;  // Основная/толстая линия
     }
 
     // Применяем ОБЩИЙ глобальный масштаб толщины
     double s = baseWidth * global.globalWidthScale;
-    if (s < 0.5) s = 0.5; // Минимальная видимая толщина
+    if (s < 0.25) s = 0.25; // Минимальная видимая толщина по ГОСТ
 
     QVector<qreal> dashes;
     // Глобальный масштаб штрихов (LTSCALE)
@@ -379,11 +380,11 @@ void ArcDraw::draw(QPainter& painter, Object* primitive, bool isSelected) const 
             painter.drawPath(path);
         } else {
             // Standard solid lines
-            // Qt использует углы в 1/16 градуса, начало отсчета - 3 часа (90 градусов)
-            // Конвертируем: Qt angle = (90 - angle) * 16
+            // Qt использует углы в 1/16 градуса
+            // Инвертируем углы для корректного отображения в мировых координатах
             QRectF rect(c.getX() - r, c.getY() - r, r * 2, r * 2);
-            int qtStartAngle = int((90.0 - obj->getStartAngle()) * 16);
-            int qtSpanAngle = int(obj->getSpanAngle() * 16);
+            int qtStartAngle = int(-obj->getStartAngle() * 16);
+            int qtSpanAngle = int(-obj->getSpanAngle() * 16);
             painter.drawArc(rect, qtStartAngle, qtSpanAngle);
         }
     }
