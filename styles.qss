@@ -213,9 +213,8 @@ QToolButton[isIconButton="true"]:hover {
 }
 
 QToolButton[isIconButton="true"]:checked {
-    background-color: #383949;
     border: 1px solid #F92672;
-    color: white;
+    background-color: #383949;
 }
 
 QToolButton[isIconButton="true"][hasPopup="true"] {
