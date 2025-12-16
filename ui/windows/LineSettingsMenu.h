@@ -18,6 +18,6 @@ signals:
     void settingsChanged();
 
 private:
-    QDoubleSpinBox* createDoubleSpin(double val, double min = 0.1, double max = 100.0, double step = 0.5);
+    QDoubleSpinBox* createDoubleSpin(double val, double min = 0.1, double max = 100.0, double step = 0.01);
     void setupUi();
 };

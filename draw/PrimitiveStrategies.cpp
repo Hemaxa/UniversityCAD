@@ -133,30 +133,162 @@ static void drawStyledEllipse(QPainter& painter, const QPointF& center, double r
     LineStyleType type = obj->getLineStyle().type;
 
     if (type == LineStyleType::SolidWavy) {
-        // Аппроксимация эллипса сегментами для волнистой линии
-        // Используем больше сегментов для плавности при увеличении
-        int numSegments = std::max(72, int(std::max(rx, ry) * 2));
-        auto points = getEllipsePoints(center, rx, ry, numSegments);
+        // Создаем волнистую линию вдоль всей окружности/эллипса
+        // Используем параметризацию по углу и применяем синусоидальное смещение
+        const auto& wavy = GlobalSettings::instance().wavyParams;
+        double amplitude = wavy.amplitude;
+        double period = wavy.period;
+        
+        // Приблизительная длина окружности/эллипса для расчета количества волн
+        double circumference = M_PI * (3.0 * (rx + ry) - std::sqrt((3.0 * rx + ry) * (rx + 3.0 * ry)));
+        
+        // Количество точек для плавной волны - больше точек для более плавной линии
+        int numPoints = std::max(180, int(circumference / 2.0));
+        
         QPainterPath path;
-        if(!points.empty()) {
-            path.moveTo(points[0]);
-            for(size_t i = 0; i < points.size() - 1; ++i) {
-                path.connectPath(createWavyPath(points[i], points[i+1]));
+        for (int i = 0; i <= numPoints; ++i) {
+            double t = (double)i / numPoints;
+            double angle = t * 2.0 * M_PI;
+            
+            // Базовая точка на эллипсе
+            double baseX = center.x() + rx * std::cos(angle);
+            double baseY = center.y() + ry * std::sin(angle);
+            
+            // Направление нормали (наружу от эллипса)
+            // Для эллипса нормаль не совпадает с радиальным направлением
+            double nx = ry * std::cos(angle);  // Компонента нормали X
+            double ny = rx * std::sin(angle);  // Компонента нормали Y
+            double nLen = std::sqrt(nx * nx + ny * ny);
+            if (nLen > 1e-9) {
+                nx /= nLen;
+                ny /= nLen;
+            }
+            
+            // Длина вдоль кривой (приблизительно)
+            double arcLen = t * circumference;
+            
+            // Синусоидальное смещение вдоль нормали
+            double offset = amplitude * std::sin(arcLen * 2.0 * M_PI / period);
+            
+            double px = baseX + offset * nx;
+            double py = baseY + offset * ny;
+            
+            if (i == 0) {
+                path.moveTo(px, py);
+            } else {
+                path.lineTo(px, py);
             }
         }
         painter.drawPath(path);
+        
     } else if (type == LineStyleType::SolidZigZag) {
-        // Больше сегментов для плавного изгиба линии с изломами
-        int numSegments = std::max(72, int(std::max(rx, ry) * 2));
-        auto points = getEllipsePoints(center, rx, ry, numSegments);
+        // Создаем зигзаг линию вдоль всей окружности/эллипса
+        const auto& zigzag = GlobalSettings::instance().zigzagParams;
+        double amplitude = zigzag.amplitude;
+        double straightLen = zigzag.straightLength;
+        double breakLen = zigzag.breakLength;
+        
+        // Приблизительная длина окружности/эллипса
+        double circumference = M_PI * (3.0 * (rx + ry) - std::sqrt((3.0 * rx + ry) * (rx + 3.0 * ry)));
+        
+        // Один полный паттерн: прямой участок + излом
+        double patternLen = straightLen + 2.0 * breakLen;
+        
         QPainterPath path;
-        if(!points.empty()) {
-            path.moveTo(points[0]);
-            for(size_t i = 0; i < points.size() - 1; ++i) {
-                path.connectPath(createZigZagPath(points[i], points[i+1]));
+        double currentArcLen = 0.0;
+        double totalLen = circumference;
+        bool firstPoint = true;
+        int direction = 1; // Чередуем направление излома
+        
+        while (currentArcLen < totalLen) {
+            // Вычисляем угол по длине дуги (приблизительно)
+            double t = currentArcLen / circumference;
+            double angle = t * 2.0 * M_PI;
+            
+            // Базовая точка на эллипсе
+            double baseX = center.x() + rx * std::cos(angle);
+            double baseY = center.y() + ry * std::sin(angle);
+            
+            // Направление нормали
+            double nx = ry * std::cos(angle);
+            double ny = rx * std::sin(angle);
+            double nLen = std::sqrt(nx * nx + ny * ny);
+            if (nLen > 1e-9) {
+                nx /= nLen;
+                ny /= nLen;
             }
+            
+            if (firstPoint) {
+                path.moveTo(baseX, baseY);
+                firstPoint = false;
+            }
+            
+            // Прямой участок
+            double nextArcLen = currentArcLen + straightLen;
+            if (nextArcLen >= totalLen) {
+                // Замыкаем на начальную точку
+                path.lineTo(center.x() + rx, center.y());
+                break;
+            }
+            
+            double t2 = nextArcLen / circumference;
+            double angle2 = t2 * 2.0 * M_PI;
+            double x2 = center.x() + rx * std::cos(angle2);
+            double y2 = center.y() + ry * std::sin(angle2);
+            path.lineTo(x2, y2);
+            currentArcLen = nextArcLen;
+            
+            // Излом вниз (первая половина)
+            nextArcLen = currentArcLen + breakLen / 2.0;
+            if (nextArcLen >= totalLen) {
+                path.lineTo(center.x() + rx, center.y());
+                break;
+            }
+            t2 = nextArcLen / circumference;
+            angle2 = t2 * 2.0 * M_PI;
+            double nx2 = ry * std::cos(angle2);
+            double ny2 = rx * std::sin(angle2);
+            nLen = std::sqrt(nx2 * nx2 + ny2 * ny2);
+            if (nLen > 1e-9) { nx2 /= nLen; ny2 /= nLen; }
+            x2 = center.x() + rx * std::cos(angle2) - direction * amplitude * nx2;
+            y2 = center.y() + ry * std::sin(angle2) - direction * amplitude * ny2;
+            path.lineTo(x2, y2);
+            currentArcLen = nextArcLen;
+            
+            // Проход через линию к верхней точке
+            nextArcLen = currentArcLen + breakLen;
+            if (nextArcLen >= totalLen) {
+                path.lineTo(center.x() + rx, center.y());
+                break;
+            }
+            t2 = nextArcLen / circumference;
+            angle2 = t2 * 2.0 * M_PI;
+            nx2 = ry * std::cos(angle2);
+            ny2 = rx * std::sin(angle2);
+            nLen = std::sqrt(nx2 * nx2 + ny2 * ny2);
+            if (nLen > 1e-9) { nx2 /= nLen; ny2 /= nLen; }
+            x2 = center.x() + rx * std::cos(angle2) + direction * amplitude * nx2;
+            y2 = center.y() + ry * std::sin(angle2) + direction * amplitude * ny2;
+            path.lineTo(x2, y2);
+            currentArcLen = nextArcLen;
+            
+            // Возврат на линию
+            nextArcLen = currentArcLen + breakLen / 2.0;
+            if (nextArcLen >= totalLen) {
+                path.lineTo(center.x() + rx, center.y());
+                break;
+            }
+            t2 = nextArcLen / circumference;
+            angle2 = t2 * 2.0 * M_PI;
+            x2 = center.x() + rx * std::cos(angle2);
+            y2 = center.y() + ry * std::sin(angle2);
+            path.lineTo(x2, y2);
+            currentArcLen = nextArcLen;
+            
+            direction = -direction; // Чередуем направление
         }
         painter.drawPath(path);
+        
     } else {
         // For dashed lines and other styles, approximate ellipse with segments
         // to ensure proper dash pattern rendering
@@ -351,29 +483,142 @@ void ArcDraw::draw(QPainter& painter, Object* primitive, bool isSelected) const 
     LineStyleType type = obj->getLineStyle().type;
     double r = obj->getRadius();
     Point c = obj->getCenter();
+    double startAngle = obj->getStartAngle();
+    double spanAngle = obj->getSpanAngle();
     
-    if (type == LineStyleType::SolidWavy || type == LineStyleType::SolidZigZag) {
-        QPainterPath styledPath;
+    if (type == LineStyleType::SolidWavy) {
+        // Создаем волнистую линию вдоль всей дуги
+        const auto& wavy = GlobalSettings::instance().wavyParams;
+        double amplitude = wavy.amplitude;
+        double period = wavy.period;
         
-        // Аппроксимируем дугу отрезками для стилизации
-        // Больше сегментов для плавности при увеличении
-        int steps = std::max(36, int(std::abs(obj->getSpanAngle()) / 2));
-        double step = obj->getSpanAngle() / steps;
-        double start = obj->getStartAngle();
+        // Длина дуги
+        double arcLength = std::abs(spanAngle) * M_PI / 180.0 * r;
         
-        QPointF prev(c.getX() + r * std::cos(start * M_PI/180), c.getY() + r * std::sin(start * M_PI/180));
-        styledPath.moveTo(prev);
+        // Количество точек для плавной волны
+        int numPoints = std::max(90, int(arcLength / 2.0));
         
-        for(int i = 1; i <= steps; ++i) {
-            double a = start + i * step;
-            QPointF cur(c.getX() + r * std::cos(a * M_PI/180), c.getY() + r * std::sin(a * M_PI/180));
-            if (type == LineStyleType::SolidWavy)
-                styledPath.connectPath(createWavyPath(prev, cur));
-            else 
-                styledPath.connectPath(createZigZagPath(prev, cur));
-            prev = cur;
+        QPainterPath path;
+        for (int i = 0; i <= numPoints; ++i) {
+            double t = (double)i / numPoints;
+            double angle = (startAngle + t * spanAngle) * M_PI / 180.0;
+            
+            // Базовая точка на дуге
+            double baseX = c.getX() + r * std::cos(angle);
+            double baseY = c.getY() + r * std::sin(angle);
+            
+            // Направление нормали (радиальное направление для окружности)
+            double nx = std::cos(angle);
+            double ny = std::sin(angle);
+            
+            // Длина вдоль дуги
+            double arcLen = t * arcLength;
+            
+            // Синусоидальное смещение вдоль нормали
+            double offset = amplitude * std::sin(arcLen * 2.0 * M_PI / period);
+            
+            double px = baseX + offset * nx;
+            double py = baseY + offset * ny;
+            
+            if (i == 0) {
+                path.moveTo(px, py);
+            } else {
+                path.lineTo(px, py);
+            }
         }
-        painter.drawPath(styledPath);
+        painter.drawPath(path);
+        
+    } else if (type == LineStyleType::SolidZigZag) {
+        // Создаем зигзаг линию вдоль всей дуги
+        const auto& zigzag = GlobalSettings::instance().zigzagParams;
+        double amplitude = zigzag.amplitude;
+        double straightLen = zigzag.straightLength;
+        double breakLen = zigzag.breakLength;
+        
+        // Длина дуги
+        double arcLength = std::abs(spanAngle) * M_PI / 180.0 * r;
+        
+        QPainterPath path;
+        double currentArcLen = 0.0;
+        double totalLen = arcLength;
+        bool firstPoint = true;
+        int direction = 1; // Чередуем направление излома
+        
+        auto getPointOnArc = [&](double arcLen) -> std::pair<double, double> {
+            double t = arcLen / arcLength;
+            double angle = (startAngle + t * spanAngle) * M_PI / 180.0;
+            return {c.getX() + r * std::cos(angle), c.getY() + r * std::sin(angle)};
+        };
+        
+        auto getNormalOnArc = [&](double arcLen) -> std::pair<double, double> {
+            double t = arcLen / arcLength;
+            double angle = (startAngle + t * spanAngle) * M_PI / 180.0;
+            return {std::cos(angle), std::sin(angle)};
+        };
+        
+        while (currentArcLen < totalLen) {
+            auto [baseX, baseY] = getPointOnArc(currentArcLen);
+            
+            if (firstPoint) {
+                path.moveTo(baseX, baseY);
+                firstPoint = false;
+            }
+            
+            // Прямой участок
+            double nextArcLen = currentArcLen + straightLen;
+            if (nextArcLen >= totalLen) {
+                auto [endX, endY] = getPointOnArc(totalLen);
+                path.lineTo(endX, endY);
+                break;
+            }
+            
+            auto [x2, y2] = getPointOnArc(nextArcLen);
+            path.lineTo(x2, y2);
+            currentArcLen = nextArcLen;
+            
+            // Излом вниз (первая половина)
+            nextArcLen = currentArcLen + breakLen / 2.0;
+            if (nextArcLen >= totalLen) {
+                auto [endX, endY] = getPointOnArc(totalLen);
+                path.lineTo(endX, endY);
+                break;
+            }
+            auto [bx, by] = getPointOnArc(nextArcLen);
+            auto [nx, ny] = getNormalOnArc(nextArcLen);
+            x2 = bx - direction * amplitude * nx;
+            y2 = by - direction * amplitude * ny;
+            path.lineTo(x2, y2);
+            currentArcLen = nextArcLen;
+            
+            // Проход через линию к верхней точке
+            nextArcLen = currentArcLen + breakLen;
+            if (nextArcLen >= totalLen) {
+                auto [endX, endY] = getPointOnArc(totalLen);
+                path.lineTo(endX, endY);
+                break;
+            }
+            std::tie(bx, by) = getPointOnArc(nextArcLen);
+            std::tie(nx, ny) = getNormalOnArc(nextArcLen);
+            x2 = bx + direction * amplitude * nx;
+            y2 = by + direction * amplitude * ny;
+            path.lineTo(x2, y2);
+            currentArcLen = nextArcLen;
+            
+            // Возврат на линию
+            nextArcLen = currentArcLen + breakLen / 2.0;
+            if (nextArcLen >= totalLen) {
+                auto [endX, endY] = getPointOnArc(totalLen);
+                path.lineTo(endX, endY);
+                break;
+            }
+            std::tie(x2, y2) = getPointOnArc(nextArcLen);
+            path.lineTo(x2, y2);
+            currentArcLen = nextArcLen;
+            
+            direction = -direction; // Чередуем направление
+        }
+        painter.drawPath(path);
+        
     } else {
         // For dashed lines and other styles, approximate arc with segments
         // to ensure proper dash pattern rendering
@@ -385,15 +630,14 @@ void ArcDraw::draw(QPainter& painter, Object* primitive, bool isSelected) const 
         
         if (needsSegmentation) {
             QPainterPath path;
-            int steps = std::max(40, int(std::abs(obj->getSpanAngle()) / 2));
-            double step = obj->getSpanAngle() / steps;
-            double start = obj->getStartAngle();
+            int steps = std::max(40, int(std::abs(spanAngle) / 2));
+            double step = spanAngle / steps;
             
-            QPointF first(c.getX() + r * std::cos(start * M_PI/180), c.getY() + r * std::sin(start * M_PI/180));
+            QPointF first(c.getX() + r * std::cos(startAngle * M_PI/180), c.getY() + r * std::sin(startAngle * M_PI/180));
             path.moveTo(first);
             
             for(int i = 1; i <= steps; ++i) {
-                double a = start + i * step;
+                double a = startAngle + i * step;
                 QPointF cur(c.getX() + r * std::cos(a * M_PI/180), c.getY() + r * std::sin(a * M_PI/180));
                 path.lineTo(cur);
             }
@@ -403,8 +647,8 @@ void ArcDraw::draw(QPainter& painter, Object* primitive, bool isSelected) const 
             // Qt использует углы в 1/16 градуса
             // Инвертируем углы для корректного отображения в мировых координатах
             QRectF rect(c.getX() - r, c.getY() - r, r * 2, r * 2);
-            int qtStartAngle = int(-obj->getStartAngle() * 16);
-            int qtSpanAngle = int(-obj->getSpanAngle() * 16);
+            int qtStartAngle = int(-startAngle * 16);
+            int qtSpanAngle = int(-spanAngle * 16);
             painter.drawArc(rect, qtStartAngle, qtSpanAngle);
         }
     }

@@ -94,7 +94,7 @@ void LineSettingsMenu::setupUi() {
     auto* globalForm = new QFormLayout(globalGroup);
 
     // Толщина основной линии (s): 0.5-1.4 мм, по умолчанию 0.8 мм
-    auto* mainWidth = createDoubleSpin(GlobalSettings::instance().mainLineWidth, 0.5, 1.4, 0.1);
+    auto* mainWidth = createDoubleSpin(GlobalSettings::instance().mainLineWidth, 0.5, 1.4, 0.01);
     mainWidth->setSuffix(" мм");
     connect(mainWidth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [](double v){ 
         GlobalSettings::instance().mainLineWidth = v; 
@@ -102,20 +102,20 @@ void LineSettingsMenu::setupUi() {
     globalForm->addRow("Толщина основной (s):", mainWidth);
     
     // Толщина тонкой линии (s/2): 0.25-0.7 мм, по умолчанию 0.4 мм
-    auto* thinWidth = createDoubleSpin(GlobalSettings::instance().thinLineWidth, 0.25, 0.7, 0.05);
+    auto* thinWidth = createDoubleSpin(GlobalSettings::instance().thinLineWidth, 0.25, 0.7, 0.01);
     thinWidth->setSuffix(" мм");
     connect(thinWidth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [](double v){ 
         GlobalSettings::instance().thinLineWidth = v; 
     });
     globalForm->addRow("Толщина тонкой (s/2):", thinWidth);
 
-    auto* wScale = createDoubleSpin(GlobalSettings::instance().globalWidthScale, 0.1, 10.0, 0.1);
+    auto* wScale = createDoubleSpin(GlobalSettings::instance().globalWidthScale, 0.1, 10.0, 0.01);
     connect(wScale, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [](double v){ 
         GlobalSettings::instance().globalWidthScale = v; 
     });
     globalForm->addRow("Масштаб толщины:", wScale);
 
-    auto* ltScale = createDoubleSpin(GlobalSettings::instance().globalLinetypeScale, 0.1, 10.0, 0.1);
+    auto* ltScale = createDoubleSpin(GlobalSettings::instance().globalLinetypeScale, 0.1, 10.0, 0.01);
     connect(ltScale, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [](double v){ 
         GlobalSettings::instance().globalLinetypeScale = v; 
     });
@@ -128,8 +128,8 @@ void LineSettingsMenu::setupUi() {
     auto* paramsLayout = new QFormLayout(paramsGroup);
 
     auto addParamRow = [&](const QString& name, LineStyleType type) {
-        auto* dash = createDoubleSpin(GlobalSettings::instance().styleParams[type].dash, 0.5, 50.0, 0.5);
-        auto* gap = createDoubleSpin(GlobalSettings::instance().styleParams[type].gap, 0.5, 50.0, 0.5);
+        auto* dash = createDoubleSpin(GlobalSettings::instance().styleParams[type].dash, 0.5, 50.0, 0.01);
+        auto* gap = createDoubleSpin(GlobalSettings::instance().styleParams[type].gap, 0.5, 50.0, 0.01);
 
         connect(dash, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [type](double v){ 
             GlobalSettings::instance().styleParams[type].dash = v; 
@@ -173,13 +173,13 @@ void LineSettingsMenu::setupUi() {
     auto* wavyGroup = new QGroupBox("Волнистая линия");
     auto* wavyLayout = new QFormLayout(wavyGroup);
 
-    auto* wavyAmp = createDoubleSpin(GlobalSettings::instance().wavyParams.amplitude, 0.5, 20.0, 0.5);
+    auto* wavyAmp = createDoubleSpin(GlobalSettings::instance().wavyParams.amplitude, 0.5, 20.0, 0.01);
     connect(wavyAmp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [](double v){ 
         GlobalSettings::instance().wavyParams.amplitude = v; 
     });
     wavyLayout->addRow("Амплитуда:", wavyAmp);
 
-    auto* wavyPeriod = createDoubleSpin(GlobalSettings::instance().wavyParams.period, 5.0, 100.0, 1.0);
+    auto* wavyPeriod = createDoubleSpin(GlobalSettings::instance().wavyParams.period, 5.0, 100.0, 0.01);
     connect(wavyPeriod, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [](double v){ 
         GlobalSettings::instance().wavyParams.period = v; 
     });
@@ -191,19 +191,19 @@ void LineSettingsMenu::setupUi() {
     auto* zigzagGroup = new QGroupBox("Линия с изломами");
     auto* zigzagLayout = new QFormLayout(zigzagGroup);
 
-    auto* zigzagAmp = createDoubleSpin(GlobalSettings::instance().zigzagParams.amplitude, 0.5, 20.0, 0.5);
+    auto* zigzagAmp = createDoubleSpin(GlobalSettings::instance().zigzagParams.amplitude, 0.5, 20.0, 0.01);
     connect(zigzagAmp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [](double v){ 
         GlobalSettings::instance().zigzagParams.amplitude = v; 
     });
     zigzagLayout->addRow("Высота излома:", zigzagAmp);
 
-    auto* zigzagStraight = createDoubleSpin(GlobalSettings::instance().zigzagParams.straightLength, 5.0, 100.0, 1.0);
+    auto* zigzagStraight = createDoubleSpin(GlobalSettings::instance().zigzagParams.straightLength, 5.0, 100.0, 0.01);
     connect(zigzagStraight, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [](double v){ 
         GlobalSettings::instance().zigzagParams.straightLength = v; 
     });
     zigzagLayout->addRow("Прямой участок:", zigzagStraight);
 
-    auto* zigzagBreak = createDoubleSpin(GlobalSettings::instance().zigzagParams.breakLength, 1.0, 30.0, 0.5);
+    auto* zigzagBreak = createDoubleSpin(GlobalSettings::instance().zigzagParams.breakLength, 1.0, 30.0, 0.01);
     connect(zigzagBreak, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [](double v){ 
         GlobalSettings::instance().zigzagParams.breakLength = v; 
     });
