@@ -3,10 +3,10 @@
 #include <QMainWindow>
 #include <map>
 #include <memory>
-
+#include <vector>
 #include "Enums.h"
+#include "Object.h"
 
-// Прямые объявления для уменьшения зависимостей в заголовочных файлах.
 class QSplitter;
 class Viewport;
 class Control;
@@ -17,7 +17,8 @@ class Point;
 class QColor;
 class Object;
 
-// Главное окно приложения CAD.
+// Главное окно CAD-приложения.
+// Управляет сценой, инструментами рисования и панелями интерфейса.
 class CadWindow : public QMainWindow
 {
     Q_OBJECT
@@ -25,56 +26,50 @@ class CadWindow : public QMainWindow
 public:
     // Конструктор главного окна.
     CadWindow(QWidget *parent = nullptr);
-
-    // Деструктор главного окна.
+    // Деструктор.
     ~CadWindow();
 
 private slots:
-    // Слот для изменения шага сетки.
+    // Обработчик изменения шага сетки.
     void onGridStepChanged(int step);
-
-    // Слот для изменения единиц измерения углов.
+    // Обработчик изменения единиц углов (градусы/радианы).
     void onAngleUnitChanged(AngleUnit unit);
-
-    // Слот для выбора инструмента создания примитива.
-    void onPrimitiveTypeSelected(PrimitiveType type);
-
-    // Слот для создания нового отрезка на сцене.
-    void createSegment(const Point& start, const Point& end, const QColor& color);
-
-    // Слот для обработки запроса на удаление объекта.
+    // Обработчик выбора типа примитива и метода построения.
+    void onPrimitiveTypeSelected(PrimitiveType type, int methodIndex);
+    // Обработчик запроса на удаление выбранных объектов.
     void onDeleteRequested();
-
-    // Слот для обработки выбора объекта в списке.
-    void onObjectSelected(Object* selectedObject);
-
-    // Слот для обработки изменения данных объекта.
-    void onObjectModified(Object* obj);
+    // Обработчик выбора объектов на виджете просмотра.
+    void onObjectsSelected(const std::vector<Object*>& selectedObjects);
+    // Обработчик выбора объектов из списка.
+    void onObjectsSelectedFromList(const std::vector<Object*>& selectedObjects);
+    // Обработчик изменения свойств объектов.
+    void onObjectsModified(const std::vector<Object*>& objs);
+    // Обработчик запроса на создание объекта из панели свойств.
+    void onObjectCreateRequested(Object* obj);
+    // Обработчик нажатия Escape (сброс выделения/инструмента).
+    void onEscapePressed();
 
 signals:
-    // Сигнал, испускаемый при любом изменении в сцене.
+    // Сигнал об изменении сцены.
     void sceneChanged(const Scene* scene);
 
 private:
-    // Настраивает пользовательский интерфейс окна.
+    // Настройка пользовательского интерфейса.
     void setupUi();
-
-    // Создает все необходимые сигнально-слотовые соединения.
+    // Создание связей сигнал-слот.
     void createConnections();
-
-    // Инициализирует стратегии отрисовки для разных типов примитивов.
+    // Инициализация стратегий отрисовки примитивов.
     void setupDrawingStrategies();
 
-    // UI компоненты.
     QSplitter* m_mainSplitter;
     QSplitter* m_rightColumnSplitter;
     Viewport* m_viewportPanel;
     Control* m_controlPanel;
     Properties* m_propertiesPanel;
 
-    // Ядро.
     Scene* m_scene;
     std::map<PrimitiveType, std::unique_ptr<Draw>> m_drawingStrategies;
-    Object* m_selectedObject = nullptr; // Указатель на выбранный объект.
-    PrimitiveType m_activePrimitiveType = PrimitiveType::Generic; // Хранит активный инструмент
+
+    std::vector<Object*> m_selectedObjects;
+    PrimitiveType m_activePrimitiveType = PrimitiveType::Generic;
 };

@@ -2,5 +2,32 @@
     <qresource prefix="/">
         <file>styles.qss</file>
         <file>icons/segment.svg</file>
+        <file>icons/rotate-left.svg</file>
+        <file>icons/rotate-right.svg</file>
+        <file>icons/zoom-extents.svg</file>
+        <file>icons/zoom-in.svg</file>
+        <file>icons/zoom-out.svg</file>
+        <file>icons/arc-1.svg</file>
+        <file>icons/arc-2.svg</file>
+        <file>icons/circle-1.svg</file>
+        <file>icons/circle-2.svg</file>
+        <file>icons/circle-3.svg</file>
+        <file>icons/circle-4.svg</file>
+        <file>icons/ellipse-1.svg</file>
+        <file>icons/ellipse-2.svg</file>
+        <file>icons/polygon.svg</file>
+        <file>icons/rectangle-1.svg</file>
+        <file>icons/rectangle-2.svg</file>
+        <file>icons/rectangle-3.svg</file>
+        <file>icons/spline.svg</file>
+        <file>icons/settings.svg</file>
+        <file>icons/line-dashdot-thick.svg</file>
+        <file>icons/line-dashdot-thin.svg</file>
+        <file>icons/line-dashdotdot.svg</file>
+        <file>icons/line-dashed.svg</file>
+        <file>icons/line-solid-main.svg</file>
+        <file>icons/line-solid-thin.svg</file>
+        <file>icons/line-wavy.svg</file>
+        <file>icons/line-zigzag.svg</file>
     </qresource>
 </RCC>

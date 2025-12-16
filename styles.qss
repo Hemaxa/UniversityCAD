@@ -2,27 +2,49 @@
 /* CYBERPUNK NEON THEME */
 /* =================================================================== */
 * {
-    /* Устанавливает семейство шрифтов для всего приложения. */
     font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
 }
 
 QWidget {
-    /* Задает базовый цвет фона, текста и размер шрифта. */
     background-color: #1A1B26;
     color: #F0F0F0;
     font-size: 12px;
 }
 
 /* =================================================================== */
+/* SCROLL AREA */
+/* =================================================================== */
+QScrollArea {
+    border: none;
+    background-color: transparent;
+}
+
+QScrollBar:vertical {
+    border: none;
+    background: #1A1B26;
+    width: 8px;
+    margin: 0px 0px 0px 0px;
+}
+QScrollBar::handle:vertical {
+    background: #4A4A5A;
+    min-height: 20px;
+    border-radius: 4px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #F92672;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+/* =================================================================== */
 /* ПАНЕЛИ И РАЗДЕЛИТЕЛИ */
 /* =================================================================== */
 #ControlPanel, #PropertiesPanel {
-    /* Добавляет отступы для панелей управления и свойств. */
     padding: 8px;
 }
 
 QSplitter::handle {
-    /* Стилизует разделитель между виджетами. */
     background-color: #F92672;
 }
 
@@ -30,10 +52,9 @@ QSplitter::handle:horizontal { width: 1px; }
 QSplitter::handle:vertical { height: 1px; }
 
 /* =================================================================== */
-/* ГРУППЫ */
+/* ГРУППЫ (QGroupBox) */
 /* =================================================================== */
 QGroupBox {
-    /* Определяет стиль для контейнеров QGroupBox. */
     font-size: 13px;
     font-weight: bold;
     color: #66D9EF;
@@ -44,39 +65,25 @@ QGroupBox {
 }
 
 QGroupBox::title {
-    /* Позиционирует заголовок группы по центру. */
     subcontrol-origin: margin;
     subcontrol-position: top center;
     padding: 0 8px;
-}
-
-#ControlPanel > QGroupBox:first-child,
-#PropertiesPanel > QGroupBox:first-child {
-    /* Убирает верхний отступ у первой группы на панелях. */
-    margin-top: 0;
 }
 
 /* =================================================================== */
 /* ПОЛЯ ВВОДА */
 /* =================================================================== */
 QDoubleSpinBox, QSpinBox, QComboBox, QLineEdit {
-    /* Общий стиль для всех полей ввода. */
     background-color: #282936;
     color: #F0F0F0;
     border: 1px solid #4A4A5A;
     border-radius: 4px;
     padding: 4px 6px;
     min-height: 20px;
-    min-width: 100px;
-}
-
-QSpinBox {
-    /* Устанавливает минимальную ширину для QSpinBox. */
-    min-width: 104px;
+    min-width: 60px;
 }
 
 QDoubleSpinBox:focus, QSpinBox:focus, QComboBox:focus, QLineEdit:focus {
-    /* Стиль полей ввода при получении фокуса. */
     border: 1px solid #66D9EF;
     background-color: #313241;
 }
@@ -84,14 +91,11 @@ QDoubleSpinBox:focus, QSpinBox:focus, QComboBox:focus, QLineEdit:focus {
 QDoubleSpinBox::up-arrow, QSpinBox::up-arrow,
 QDoubleSpinBox::down-arrow, QSpinBox::down-arrow,
 QComboBox::down-arrow {
-    /* Скрывает стандартные стрелки в полях ввода. */
     image: none;
 }
 
-/* Стилизуем сами кнопки-стрелки */
 QDoubleSpinBox::up-button, QSpinBox::up-button,
 QDoubleSpinBox::down-button, QSpinBox::down-button {
-    /* Стиль для кнопок увеличения/уменьшения значения. */
     background-color: #313241;
     border-left: 1px solid #4A4A5A;
     width: 15px;
@@ -99,34 +103,29 @@ QDoubleSpinBox::down-button, QSpinBox::down-button {
 
 QDoubleSpinBox::up-button:hover, QSpinBox::up-button:hover,
 QDoubleSpinBox::down-button:hover, QSpinBox::down-button:hover {
-    /* Стиль кнопок при наведении курсора. */
     background-color: #66D9EF;
 }
 
-/* Стилизация выпадающего списка */
 QComboBox::drop-down {
-    /* Стиль для кнопки выпадающего списка. */
     background-color: #313241;
     border-left: 1px solid #4A4A5A;
     width: 15px;
 }
 QComboBox::drop-down:hover {
-    /* Стиль кнопки при наведении курсора. */
     background-color: #66D9EF;
 }
 
 QComboBox QAbstractItemView {
-    /* Стиль для элементов выпадающего списка. */
     background-color: #282936;
     border: 1px solid #66D9EF;
     selection-background-color: #F92672;
+    color: #F0F0F0;
 }
 
 /* =================================================================== */
-/* КНОПКИ */
+/* КНОПКИ (QPushButton) */
 /* =================================================================== */
 QPushButton {
-    /* Общий стиль для кнопок QPushButton. */
     background-color: #F92672;
     color: #FFFFFF;
     font-weight: normal;
@@ -139,12 +138,49 @@ QPushButton {
 QPushButton:hover { background-color: #FF5995; }
 QPushButton:pressed { background-color: #D3205E; }
 
+/* Кнопка "Удалить" в панели управления */
 #deleteButton { background-color: #FD971F; color: #1A1B26; }
 #deleteButton:hover { background-color: #FFB86C; }
 #deleteButton:pressed { background-color: #E68A1E; }
 
+/* Кнопка "Применить" в свойствах (Два состояния) */
+#ApplyButton[state="create"] {
+    background-color: #F92672;
+    color: white;
+}
+#ApplyButton[state="update"] {
+    background-color: #66D9EF;
+    color: #1A1B26;
+    font-weight: bold;
+}
+
+/* Кнопка выбора пресета стиля (выглядит как выпадающий список) */
+#StylePresetButton {
+    text-align: left;
+    padding-left: 10px;
+    background-color: #282936;
+    border: 1px solid #4A4A5A;
+}
+#StylePresetButton:hover {
+    border-color: #66D9EF;
+}
+
+/* Кнопка цвета (Color Picker) */
+#ColorPickerButton {
+    border: 1px solid #777777;
+    min-height: 10px; min-width: 10px;
+    max-height: 10px;
+    max-width: 10px;
+    border-radius: 5px;
+}
+#ColorPickerButton:hover {
+    border: 1px solid #66D9EF;
+}
+
+/* =================================================================== */
+/* ИНСТРУМЕНТЫ (QToolButton) */
+/* =================================================================== */
 QToolButton {
-    /* Стиль для кнопок QToolButton. */
     background-color: #313241;
     color: #C0C0C0;
     font-weight: normal;
@@ -156,73 +192,99 @@ QToolButton {
 
 QToolButton:hover { border-color: #66D9EF; }
 QToolButton:checked {
-    /* Стиль для QToolButton в нажатом/выбранном состоянии. */
     background-color: #66D9EF;
     color: #1A1B26;
     border-color: #66D9EF;
 }
 
-/* =================================================================== */
-/* ПРОЧИЕ ВИДЖЕТЫ */
-/* =================================================================== */
-QListWidget {
-    /* Стиль для списка объектов. */
-    border: 1px solid #4A4A5A;
-    border-radius: 4px;
-}
-QListWidget::item { padding: 5px; }
-QListWidget::item:selected { background-color: #F92672; color: white; }
-
-#InfoLabel {
-    /* Стиль для информационной панели во вьюпорте. */
-    background-color: rgba(18, 18, 18, 0.85);
-    border: 1px solid #4A4A5A;
-    border-radius: 6px;
-    padding: 8px;
-    font-size: 12px;
-    color: #A6E22E;
-}
-
-#ColorPickerButton {
-    /* Стиль для кнопки выбора цвета, делающий ее круглой. */
-    border: 1px solid #777777;
-    min-height: 10px;
-    min-width: 10px;
-    max-height: 10px;
-    max-width: 10px;
-    border-radius: 5px; /* Половина от размера */
-}
-
-#ColorPickerButton:hover {
-    /* Стиль круглой кнопки при наведении. */
-    border: 1px solid #66D9EF;
-}
-
-/* =================================================================== */
-/* КНОПКИ-ИКОНКИ (Icon Buttons) */
-/* =================================================================== */
-
-/* Базовый стиль для кнопки-иконки */
 QToolButton[isIconButton="true"] {
-    /* Задаем размер */
-    min-width: 28px;
-    max-width: 28px;
+    min-width: 28px; max-width: 28px;
     min-height: 28px;
     max-height: 28px;
-    padding: 4px; /* Внутренний отступ для иконки */
-
-    /* Фон и рамка по умолчанию */
+    padding: 4px;
     background-color: #313241;
     border: 1px solid #4A4A5A;
     border-radius: 4px;
 }
 
-/* Рамка розовая при наведении */
 QToolButton[isIconButton="true"]:hover {
-    border-color: #F92672;
+    border: 1px solid #F92672;
+    background-color: #383949;
 }
 
-/* Рамка розовая при нажатии */
 QToolButton[isIconButton="true"]:checked {
-    border-color: #F92672; /* Рамка тоже розовая */
+    border: 1px solid #F92672;
+    background-color: #383949;
+}
+
+QToolButton[isIconButton="true"][hasPopup="true"] {
+    padding-bottom: 2px;
+    padding-right: 2px;
+}
+
+/* =================================================================== */
+/* СПИСКИ (QListWidget) */
+/* =================================================================== */
+QListWidget {
+    border: 1px solid #4A4A5A;
+    border-radius: 4px;
+    background-color: #1A1B26;
+}
+QListWidget::item { padding: 5px; }
+QListWidget::item:selected { background-color: #F92672; color: white; }
+
+/* =================================================================== */
+/* ВЬЮПОРТ ИНФО (InfoLabel) */
+/* =================================================================== */
+#InfoLabel {
+    background-color: rgba(18, 18, 18, 0.85);
+    border: 1px solid #4A4A5A;
+    border-radius: 5px;
+    padding: 5px;
+    font-size: 12px;
+    color: #A6E22E;
+}
+
+#PlaceholderLabel {
+    color: #777777;
+    font-style: italic;
+    font-size: 14px;
+}
+
+/* =================================================================== */
+/* КОНТЕКСТНОЕ МЕНЮ (QMenu) */
+/* =================================================================== */
+QMenu {
+    background-color: #282936;
+    border: 1px solid #F92672;
+    padding: 5px;
+}
+
+QMenu::item {
+    padding: 8px 25px 8px 32px;
+    color: #F0F0F0;
+    font-size: 14px;
+}
+
+QMenu::icon { left: 8px; }
+
+QMenu::item:selected {
+    background-color: #313241;
+    color: white;
+}
+
+QMenu::separator {
+    height: 1px;
+    background-color: #4A4A5A;
+    margin: 5px 10px;
+}
+
+QDialog {
+    background-color: #1A1B26;
+    color: #F0F0F0;
+}
+
+QDialog QLabel {
+    color: #F0F0F0;
+    font-weight: bold;
 }

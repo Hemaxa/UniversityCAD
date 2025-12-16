@@ -1,96 +1,120 @@
 #pragma once
-
 #include <QWidget>
-
+#include <vector>
+#include <map>
+#include <memory>
 #include "Enums.h"
+#include "Object.h"
 
-// Прямые объявления.
 class QStackedWidget;
 class QPushButton;
 class QLabel;
 class Point;
-class QColor;
 class QDoubleSpinBox;
-class Object;
-class Segment;
+class QComboBox;
+class QSpinBox;
+class QGroupBox;
+class QGridLayout;
+class QVBoxLayout;
+class QScrollArea;
 
-// Панель для ввода параметров создаваемого объекта.
 class Properties : public QWidget
 {
     Q_OBJECT
 
 public:
-    // Конструктор панели свойств.
     explicit Properties(QWidget *parent = nullptr);
 
+    LineStyle getCurrentStyle() const { return m_currentStyle; }
+    QColor getCurrentColor() const { return m_selectedColor; }
+    void applyCurrentStyleTo(Object* obj) const;
+
 public slots:
-    // Устанавливает текущую систему координат (декартову или полярную).
     void setCoordinateSystem(CoordinateSystemType type);
-
-    // Обновляет суффиксы для полей ввода углов (° или rad).
-    void updateAngleLabels();
-
-    // Показывает панель создания.
-    void showCreationPropertiesFor(PrimitiveType type);
-
-    // Показывает панель редактирования для выбранного объекта.
-    void showEditingPropertiesFor(Object* obj);
+    void showCreationPropertiesFor(PrimitiveType type, int methodIndex = 0);
+    void showEditingPropertiesFor(const std::vector<Object*>& objects);
 
 signals:
-    // Сигнал, запрашивающий создание отрезка с заданными параметрами.
-    void segmentCreateRequested(const Point& start, const Point& end, const QColor& color);
-
-    // Сигнал, что данные объекта были изменены.
-    void objectModified(Object* obj);
+    void objectCreateRequested(Object* obj);
+    void objectsModified(const std::vector<Object*>& objs);
 
 private slots:
-    // Слот обрабатывает и "Создать", и "Применить".
     void onApplyClicked();
-
-    // Слот, вызываемый при нажатии на кнопку выбора цвета.
     void onColorButtonClicked();
-
-    // Слот для обновления вычисляемых метрик (длина, угол).
-    void updateSegmentMetrics();
+    void showStyleMenu();
+    void onAddCustomStyle();
+    void onEditCustomStyle(int index);
+    void onDeleteCustomStyle(int index);
+    void onAddSplinePoint();
+    void onRemoveSplinePoint();
+    void clearAllSplinePoints();
 
 private:
-    // Создает виджет-заглушку (когда не выбран инструмент).
-    QWidget* createPlaceholderWidget();
+    QWidget* createPlaceholder();
+    QGridLayout* setupGridLayout(QGroupBox* group);
+    void addRow(QGridLayout* layout, int row, QLabel* l1, QWidget* w1, QLabel* l2 = nullptr, QWidget* w2 = nullptr);
 
-    // Создает виджеты для ввода параметров отрезка.
-    QWidget* createSegmentWidgets();
+    QWidget* createSegmentWidget();
+    QWidget* createCircleWidget();
+    QWidget* createArcWidget();
+    QWidget* createRectangleWidget();
+    QWidget* createEllipseWidget();
+    QWidget* createPolygonWidget();
+    QWidget* createSplineWidget();
+    QGroupBox* createStyleWidget();
 
-    // Обновляет цвет фона кнопки выбора цвета.
-    void updateColorButton(const QColor& color);
+    void populateFields(Object* obj);
+    void populateStyleFields(const std::vector<Object*>& objects);
+    void updateObjectGeometry(Object* obj);
+    void updateLabels();
+    Point readPoint(QDoubleSpinBox* xBox, QDoubleSpinBox* yBox) const;
 
-    // Заполняет поля данными из выбранного отрезка.
-    void populateFields(Segment* segment);
-
-    // Считывает данные из полей и обновляет выбранный объект.
-    void updateSelectedObject();
-
-    // Считывает точки из полей (используется и для создания, и для обновления).
-    void getPointsFromFields(Point& start, Point& end);
-
-    // Элементы UI.
+    QScrollArea* m_scrollArea;
+    QWidget* m_scrollContent;
     QStackedWidget* m_stack;
     QWidget* m_placeholderWidget;
-    QWidget* m_segmentWidget;
-    CoordinateSystemType m_coordSystem;
-    QColor m_selectedColor;
+    std::map<PrimitiveType, QWidget*> m_primitiveWidgets;
+    std::map<PrimitiveType, std::vector<QLabel*>> m_coordLabels;
 
-    // Указатель на объект, который сейчас редактируется.
-    // Если nullptr, панель находится в режиме "Создание".
-    Object* m_currentObject = nullptr;
-
-    // Элементы для отрезка
-    QStackedWidget* m_segmentParamsStack;
-    QWidget* m_cartesianSegmentWidgets;
-    QWidget* m_polarSegmentWidgets;
-    QDoubleSpinBox *m_startXSpin, *m_startYSpin, *m_endXSpin, *m_endYSpin;
-    QDoubleSpinBox *m_startRadiusSpin, *m_startAngleSpin, *m_endRadiusSpin, *m_endAngleSpin;
-    QLabel *m_startAngleLabel, *m_endAngleLabel;
-    QLabel *m_segmentLengthLabel, *m_segmentAngleLabel;
-    QPushButton* m_colorButton;
+    QGroupBox* m_styleGroup;
     QPushButton* m_applyButton;
+
+    // --- Поля ввода ---
+    QDoubleSpinBox *m_segX1, *m_segY1, *m_segX2, *m_segY2;
+    QLabel *m_lblSegStartX, *m_lblSegStartY, *m_lblSegEndX, *m_lblSegEndY;
+
+    QComboBox* m_circleMethodCombo;
+    QStackedWidget* m_circleStack;
+    QDoubleSpinBox *m_circCX, *m_circCY, *m_circR, *m_circCX_D, *m_circCY_D, *m_circD, *m_circ2P1X, *m_circ2P1Y, *m_circ2P2X, *m_circ2P2Y, *m_circ3P1X, *m_circ3P1Y, *m_circ3P2X, *m_circ3P2Y, *m_circ3P3X, *m_circ3P3Y;
+
+    QComboBox* m_arcMethodCombo;
+    QStackedWidget* m_arcStack;
+    QDoubleSpinBox *m_arcCX, *m_arcCY, *m_arcR, *m_arcStart, *m_arcSpan, *m_arc3P1X, *m_arc3P1Y, *m_arc3P2X, *m_arc3P2Y, *m_arc3P3X, *m_arc3P3Y;
+
+    QComboBox* m_rectMethodCombo;
+    QStackedWidget* m_rectStack;
+    QDoubleSpinBox *m_rectP1X, *m_rectP1Y, *m_rectP2X, *m_rectP2Y, *m_rect1PX, *m_rect1PY, *m_rect1W, *m_rect1H, *m_rectCX, *m_rectCY, *m_rectCW, *m_rectCH, *m_rectChamfer;
+
+    QComboBox* m_ellMethodCombo;
+    QStackedWidget* m_ellStack;
+    QDoubleSpinBox *m_ellCX, *m_ellCY, *m_ellRX, *m_ellRY, *m_ell2CX, *m_ell2CY, *m_ell2P1X, *m_ell2P1Y, *m_ell2P2X, *m_ell2P2Y;
+
+    QDoubleSpinBox *m_polyCX, *m_polyCY, *m_polyR;
+    QSpinBox* m_polySides;
+    QComboBox* m_polyInscribed;
+
+    QGridLayout* m_splinePointsLayout;
+    std::vector<std::pair<QDoubleSpinBox*, QDoubleSpinBox*>> m_splineSpinBoxes;
+
+    QPushButton* m_stylePresetButton;
+    // Убран m_lineWidthSpin (теперь глобально)
+    QPushButton* m_colorButton;
+
+    CoordinateSystemType m_coordSystem = CoordinateSystemType::Cartesian;
+    QColor m_selectedColor = Qt::white;
+    LineStyle m_currentStyle;
+    std::vector<LineStyle> m_availableStyles;
+    std::vector<Object*> m_currentObjects;
+    bool m_isCreationMode = true;
+    PrimitiveType m_activeType = PrimitiveType::Generic;
 };

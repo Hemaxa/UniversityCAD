@@ -2,28 +2,53 @@
 #include "Scene.h"
 #include "Point.h"
 #include "Draw.h"
+#include "Camera.h"
+#include "ContextMenu.h"
+#include "Segment.h"
+#include "Snapper.h"
+#include "Tools.h"
+#include "Circle.h"
+#include "Arc.h"
+#include "Rectangle.h"
+#include "Polygon.h"
+#include "Ellipse.h"
+#include "Spline.h"
+#include "MathUtils.h"
 
 #include <QPainter>
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <QLabel>
 #include <QGridLayout>
-#include <cmath>
+#include <QtMath>
+#include <QRubberBand>
+#include <limits>
 
-// Конструктор виджета Viewport.
 Viewport::Viewport(QWidget *parent) : QWidget(parent)
 {
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
-    m_panOffset = QPointF(width() / 2.0, height() / 2.0);
 
-    // Создание и настройка инфо-панели.
+    m_camera = new Camera(this);
+    connect(m_camera, &Camera::updated, this, &Viewport::onCameraUpdated);
+
+    m_contextMenu = new ContextMenu(this);
+    connect(m_contextMenu, &ContextMenu::zoomInTriggered, this, &Viewport::zoomIn);
+    connect(m_contextMenu, &ContextMenu::zoomOutTriggered, this, &Viewport::zoomOut);
+    connect(m_contextMenu, &ContextMenu::zoomExtentsTriggered, this, &Viewport::zoomToExtents);
+    connect(m_contextMenu, &ContextMenu::rotateLeftTriggered, this, &Viewport::rotateLeft);
+    connect(m_contextMenu, &ContextMenu::rotateRightTriggered, this, &Viewport::rotateRight);
+
+    setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(this, &QWidget::customContextMenuRequested, this, &Viewport::showContextMenu);
+
+    m_rubberBand = new QRubberBand(QRubberBand::Rectangle, this);
+
     m_infoLabel = new QLabel(this);
     m_infoLabel->setObjectName("InfoLabel");
-    m_infoLabel->setFixedSize(100, 70);
+    m_infoLabel->setFixedSize(200, 80);
     m_infoLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 
-    // Размещение инфо-панели в правом нижнем углу.
     auto* layout = new QGridLayout(this);
     layout->setContentsMargins(15, 15, 15, 15);
     layout->addWidget(m_infoLabel, 1, 1, Qt::AlignBottom | Qt::AlignRight);
@@ -33,239 +58,367 @@ Viewport::Viewport(QWidget *parent) : QWidget(parent)
     updateInfoLabel();
 }
 
-// Главный метод отрисовки виджета.
-void Viewport::paintEvent(QPaintEvent *event)
-{
+Viewport::~Viewport() {}
+
+void Viewport::setScene(Scene* scene) {
+    m_scene = scene;
+    m_snapper = std::make_unique<Snapper>(m_scene);
+}
+
+void Viewport::setGridSnap(bool enabled) { m_gridSnapEnabled = enabled; }
+void Viewport::setObjectSnap(bool enabled) { m_objectSnapEnabled = enabled; }
+
+void Viewport::setActiveTool(PrimitiveType type, int subMethod) {
+    m_activeToolType = type;
+    m_activeSubMethod = subMethod;
+    m_selectedObjects.clear();
+    emit selectionChanged({});
+
+    // Передаем subMethod в инструменты для всех типов
+    switch (type) {
+    case PrimitiveType::Segment:
+        m_currentTool = std::make_unique<CreateSegmentTool>();
+        break;
+    case PrimitiveType::Circle:
+        m_currentTool = std::make_unique<CreateCircleTool>(subMethod);
+        break;
+    case PrimitiveType::Rectangle:
+        m_currentTool = std::make_unique<CreateRectangleTool>(subMethod);
+        break;
+    case PrimitiveType::Arc:
+        m_currentTool = std::make_unique<CreateArcTool>(subMethod);
+        break;
+    case PrimitiveType::Ellipse:
+        m_currentTool = std::make_unique<CreateEllipseTool>(subMethod);
+        break;
+    case PrimitiveType::Polygon:
+        m_currentTool = std::make_unique<CreatePolygonTool>(subMethod);
+        break;
+    case PrimitiveType::Spline:
+        m_currentTool = std::make_unique<CreateSplineTool>();
+        break;
+    default: m_currentTool.reset(); break;
+    }
+    update();
+}
+
+void Viewport::resetTool() {
+    m_activeToolType = PrimitiveType::Generic;
+    m_currentTool.reset();
+    update();
+}
+
+void Viewport::paintEvent(QPaintEvent *event) {
     Q_UNUSED(event);
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-
     painter.fillRect(rect(), QColor("#1A1B26"));
 
-    drawGrid(painter);
+    QTransform worldToScreen = m_camera->getWorldToScreenTransform();
+    drawGrid(painter, worldToScreen);
     drawGizmo(painter);
 
-    if (!m_scene || !m_drawingStrategies) return;
+    if (m_scene && m_drawingStrategies) {
+        painter.save();
+        painter.setTransform(worldToScreen);
+        for (const auto& primitive : m_scene->getPrimitives()) {
+            auto it = m_drawingStrategies->find(primitive->getType());
+            if (it != m_drawingStrategies->end()) {
+                bool isSelected = false;
+                for (auto* sel : m_selectedObjects) {
+                    if (sel == primitive.get()) { isSelected = true; break; }
+                }
+                it->second->draw(painter, primitive.get(), isSelected);
+            }
+        }
+        if (m_currentTool) {
+            m_currentTool->draw(painter, m_camera->getZoomFactor());
+        }
+        painter.restore();
+    }
+}
 
-    // Настройка трансформации для отрисовки объектов сцены.
-    painter.save();
-    painter.translate(0, height());
-    painter.scale(1, -1);
-    painter.scale(m_zoomFactor, m_zoomFactor);
-    painter.translate(m_panOffset.x(), m_panOffset.y());
+Point getSnappedPoint(const Point& rawWorldP, Snapper* snapper, double scale, bool objSnap, bool gridSnap, int gridStep) {
+    Point result = rawWorldP;
+    if (objSnap && snapper) {
+        auto res = snapper->snap(rawWorldP, scale);
+        if (res.snapped) return res.point;
+    }
+    if (gridSnap) {
+        double gs = (double)gridStep;
+        double x = std::round(rawWorldP.getX() / gs) * gs;
+        double y = std::round(rawWorldP.getY() / gs) * gs;
+        result = Point(x, y);
+    }
+    return result;
+}
 
-    // Отрисовка каждого примитива на сцене.
-    for (const auto& primitive : m_scene->getPrimitives()) {
-        auto it = m_drawingStrategies->find(primitive->getType());
-        if (it != m_drawingStrategies->end()) {
-            // Проверяем, является ли текущий примитив выбранным
-            bool isSelected = (primitive.get() == m_selectedObject);
-            it->second->draw(painter, primitive.get(), isSelected);
+void Viewport::mousePressEvent(QMouseEvent *event) {
+    if (event->button() == Qt::MiddleButton) {
+        m_isPanning = true; m_lastPanPos = event->pos(); setCursor(Qt::ClosedHandCursor); return;
+    }
+
+    QPointF worldF = screenToWorld(event->position());
+    Point worldP(worldF.x(), worldF.y());
+
+    if (m_snapper) {
+        m_snapper->setGridSnap(m_gridSnapEnabled, m_gridStep);
+        m_snapper->setObjectSnap(m_objectSnapEnabled);
+    }
+
+    if (m_currentTool) {
+        if (event->button() == Qt::LeftButton) {
+            m_currentTool->onMousePress(worldP, *m_snapper, m_camera->getZoomFactor());
+            if (m_currentTool->isFinished()) {
+                // Безопасно: takeObject() возвращает unique_ptr, release() передает владение
+                // в onObjectCreateRequested, где объект сразу оборачивается в unique_ptr
+                emit objectCreated(m_currentTool->takeObject().release());
+                m_currentTool->reset();
+            }
+            update();
+        } else if (event->button() == Qt::RightButton) {
+            m_currentTool->finish();
+            if (m_currentTool->isFinished()) {
+                // Безопасно: takeObject() возвращает unique_ptr, release() передает владение
+                // в onObjectCreateRequested, где объект сразу оборачивается в unique_ptr
+                emit objectCreated(m_currentTool->takeObject().release());
+                m_currentTool->reset();
+            } else {
+                m_currentTool->reset();
+            }
+            update();
+        }
+    } else {
+        if (event->button() == Qt::LeftButton) {
+            if (getGizmoRect().contains(event->pos())) { m_camera->rotateLeft(); return; }
+            
+            // Проверяем, попал ли клик непосредственно по объекту
+            Object* clickedObject = pickObjectAtPoint(event->pos());
+            if (clickedObject) {
+                // Выделяем объект для редактирования только если клик попал по нему
+                m_selectedObjects = {clickedObject};
+                emit selectionChanged(m_selectedObjects);
+                update();
+                return;
+            }
+            
+            // Если не попали по объекту, начинаем выделение рамкой
+            // Выделение рамкой активируется при зажатии кнопки мыши
+            m_isSelecting = true;
+            m_rubberBandOrigin = event->pos();
+            m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, QSize()));
+            m_rubberBand->show();
         }
     }
-    painter.restore();
 }
 
-// Обрабатывает нажатие кнопки мыши для начала панорамирования.
-void Viewport::mousePressEvent(QMouseEvent *event)
-{
-    if (event->button() == Qt::MiddleButton) {
-        m_isPanning = true;
-        m_lastPanPos = event->pos();
-        setCursor(Qt::ClosedHandCursor);
-    }
-}
-
-// Обновляет координаты на инфо-панели и выполняет панорамирование.
-void Viewport::mouseMoveEvent(QMouseEvent *event)
-{
+void Viewport::mouseMoveEvent(QMouseEvent *event) {
     m_currentMouseWorldPos = screenToWorld(event->position());
+    Point worldP(m_currentMouseWorldPos.x(), m_currentMouseWorldPos.y());
     updateInfoLabel();
 
     if (m_isPanning) {
         QPoint delta = event->pos() - m_lastPanPos;
         m_lastPanPos = event->pos();
-        m_panOffset += QPointF(delta.x() / m_zoomFactor, -delta.y() / m_zoomFactor);
+        m_camera->pan(delta);
+    }
+    else if (m_currentTool) {
+        if (m_snapper) {
+            m_snapper->setGridSnap(m_gridSnapEnabled, m_gridStep);
+            m_snapper->setObjectSnap(m_objectSnapEnabled);
+        }
+        m_currentTool->onMouseMove(worldP, *m_snapper, m_camera->getZoomFactor());
         update();
     }
-}
-
-// Завершает режим панорамирования.
-void Viewport::mouseReleaseEvent(QMouseEvent *event)
-{
-    if (event->button() == Qt::MiddleButton && m_isPanning) {
-        m_isPanning = false;
-        setCursor(Qt::ArrowCursor);
+    else if (m_isSelecting) {
+        m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, event->pos()).normalized());
     }
 }
 
-// Обрабатывает события колеса мыши для масштабирования.
-void Viewport::wheelEvent(QWheelEvent *event)
-{
-    double factor = 1.0 + (event->angleDelta().y() / 8.0) / 100.0;
-    QPointF worldPosBefore = screenToWorld(event->position());
-    m_zoomFactor *= factor;
-    m_zoomFactor = std::max(0.05, std::min(m_zoomFactor, 50.0));
-    QPointF worldPosAfter = screenToWorld(event->position());
-    m_panOffset += worldPosBefore - worldPosAfter;
-    updateInfoLabel();
-    update();
-}
-
-// Отрисовка координатной сетки.
-void Viewport::drawGrid(QPainter& painter)
-{
-    QPen gridPen(QColor(50, 52, 71), 1.0, Qt::DotLine);
-    QPen axisXPen(QColor("#F92672"), 1.5);
-    QPen axisYPen(QColor("#66D9EF"), 1.5);
-    double dynamicGridStep = calculateDynamicGridStep();
-
-    QPointF topLeft = screenToWorld({0,0});
-    QPointF bottomRight = screenToWorld({(double)width(), (double)height()});
-
-    // Вертикальные линии.
-    for (double x = std::floor(topLeft.x() / dynamicGridStep) * dynamicGridStep; x < bottomRight.x(); x += dynamicGridStep) {
-        QLineF line(worldToScreen({x, topLeft.y()}), worldToScreen({x, bottomRight.y()}));
-        painter.setPen(std::abs(x) < 1e-9 ? axisYPen : gridPen);
-        painter.drawLine(line);
-    }
-    // Горизонтальные линии.
-    for (double y = std::floor(bottomRight.y() / dynamicGridStep) * dynamicGridStep; y < topLeft.y(); y += dynamicGridStep) {
-        QLineF line(worldToScreen({topLeft.x(), y}), worldToScreen({bottomRight.x(), y}));
-        painter.setPen(std::abs(y) < 1e-9 ? axisXPen : gridPen);
-        painter.drawLine(line);
-    }
-
-    // Рисуем белую точку в начале координат.
-    painter.save();
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(Qt::white);
-    QPointF originScreen = worldToScreen({0.0, 0.0});
-    painter.drawEllipse(originScreen, 3, 3);
-    painter.restore();
-}
-
-// Отрисовка гизмо (осей координат) в левом нижнем углу.
-void Viewport::drawGizmo(QPainter& painter)
-{
-    painter.save();
-    painter.setRenderHint(QPainter::Antialiasing); // Добавим сглаживание для стрелок
-    int size = 35, padding = 15;
-    QPoint origin(padding + 10, height() - padding - 10);
-
-    QPen axisXPen(QColor("#F92672"), 2.0);
-    QPen axisYPen(QColor("#66D9EF"), 2.0);
-
-    // Ось X.
-    painter.setPen(axisXPen);
-    painter.setBrush(QColor("#F92672")); // Для заливки стрелки
-    QPoint xEnd = origin + QPoint(size, 0);
-    painter.drawLine(origin, xEnd);
-    painter.drawText(origin + QPoint(size + 5, 5), "X");
-
-    // --- Стрелка X ---
-    QPolygonF xArrow;
-    xArrow << xEnd << xEnd - QPointF(8, 4) << xEnd - QPointF(8, -4);
-    painter.drawPolygon(xArrow);
-
-    // Ось Y.
-    painter.setPen(axisYPen);
-    painter.setBrush(QColor("#66D9EF")); // Для заливки стрелки
-    QPoint yEnd = origin - QPoint(0, size);
-    painter.drawLine(origin, yEnd);
-    painter.drawText(origin - QPoint(10, size + 5), "Y");
-
-    // --- Стрелка Y ---
-    QPolygonF yArrow;
-    yArrow << yEnd << yEnd + QPointF(-4, 8) << yEnd + QPointF(4, 8);
-    painter.drawPolygon(yArrow);
-
-    // --- Точка в центре Гизмо ---
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(Qt::white);
-    painter.drawEllipse(origin, 2, 2);
-
-    painter.restore();
-}
-
-// Устанавливает сцену для отрисовки.
-void Viewport::setScene(Scene* scene) { m_scene = scene; }
-// Устанавливает стратегии отрисовки.
-void Viewport::setDrawingStrategies(const std::map<PrimitiveType, std::unique_ptr<Draw>>* strategies) { m_drawingStrategies = strategies; }
-
-// Устанавливает базовый шаг сетки и обновляет виджет.
-void Viewport::setGridStep(int step)
-{
-    if (step > 0) {
-        m_gridStep = step;
-        updateInfoLabel();
+void Viewport::mouseReleaseEvent(QMouseEvent *event) {
+    if (event->button() == Qt::LeftButton && m_isSelecting && !m_currentTool) {
+        m_isSelecting = false; m_rubberBand->hide();
+        QRect selectionRect = m_rubberBand->geometry();
+        std::vector<Object*> picked = pickObjects(selectionRect);
+        m_selectedObjects = picked;
+        emit selectionChanged(m_selectedObjects);
         update();
+    } else if (event->button() == Qt::MiddleButton) {
+        m_isPanning = false; setCursor(Qt::ArrowCursor);
     }
 }
 
-// Запрашивает перерисовку виджета.
-void Viewport::update() { QWidget::update(); }
-
-// Устанавливает текущий выбранный объект для подсветки.
-void Viewport::setSelectedObject(Object* obj)
-{
-    if (m_selectedObject != obj) {
-        m_selectedObject = obj;
-        update(); // Запрашиваем перерисовку, чтобы (де)активировать подсветку
+Object* Viewport::pickObjectAtPoint(const QPoint& screenPoint) {
+    if (!m_scene) return nullptr;
+    
+    QPointF worldF = screenToWorld(screenPoint);
+    Point worldP(worldF.x(), worldF.y());
+    
+    // Порог для попадания (в экранных координатах, конвертируем в мировые)
+    // Уменьшаем порог для более точного попадания
+    double threshold = 3.0 / m_camera->getZoomFactor(); // 3 пикселя в мировых координатах
+    
+    Object* closestObject = nullptr;
+    double minDist = std::numeric_limits<double>::max(); // Начинаем с максимального значения
+    
+    // Проверяем объекты в обратном порядке (последние нарисованные - сверху)
+    const auto& primitives = m_scene->getPrimitives();
+    for (auto it = primitives.rbegin(); it != primitives.rend(); ++it) {
+        const auto& obj = *it;
+        
+        // Получаем ближайшую точку на объекте
+        Point closest = obj->getClosestPoint(worldP);
+        double dist = MathUtils::dist(worldP, closest);
+        
+        // Сохраняем ближайший объект, если он ближе предыдущего
+        if (dist < minDist) {
+            minDist = dist;
+            closestObject = obj.get();
+        }
     }
+    
+    // Возвращаем объект только если расстояние меньше порога (клик попал по объекту)
+    return (minDist <= threshold) ? closestObject : nullptr;
 }
 
-// Преобразует мировые координаты в экранные.
-QPointF Viewport::worldToScreen(const QPointF& worldPos) const {
-    double screenX = (worldPos.x() + m_panOffset.x()) * m_zoomFactor;
-    double screenY = (worldPos.y() + m_panOffset.y()) * m_zoomFactor;
-    return QPointF(screenX, height() - screenY);
-}
+std::vector<Object*> Viewport::pickObjects(const QRect& screenRect) {
+    std::vector<Object*> result;
+    if (!m_scene) return result;
 
-// Преобразует экранные координаты в мировые.
-QPointF Viewport::screenToWorld(const QPointF& screenPos) const {
-    double worldX = (screenPos.x() / m_zoomFactor) - m_panOffset.x();
-    double worldY = ((height() - screenPos.y()) / m_zoomFactor) - m_panOffset.y();
-    return QPointF(worldX, worldY);
-}
+    for (const auto& obj : m_scene->getPrimitives()) {
+        bool inside = false;
+        auto check = [&](const Point& p) {
+            return screenRect.contains(worldToScreen(QPointF(p.getX(), p.getY())).toPoint());
+        };
 
-// Слот для смены системы координат на инфо-панели.
-void Viewport::setCoordinateSystem(CoordinateSystemType type)
-{
-    m_coordSystemType = type;
-    updateInfoLabel();
-}
+        switch (obj->getType()) {
+        case PrimitiveType::Segment: {
+            auto* s = static_cast<Segment*>(obj.get());
+            if (check(s->getStart()) && check(s->getEnd())) inside = true;
+            break;
+        }
+        case PrimitiveType::Circle: {
+            auto* c = static_cast<Circle*>(obj.get());
+            Point center = c->getCenter();
+            double r = c->getRadius();
+            if (check(center) &&
+                check(Point(center.getX()+r, center.getY())) &&
+                check(Point(center.getX()-r, center.getY())) &&
+                check(Point(center.getX(), center.getY()+r)) &&
+                check(Point(center.getX(), center.getY()-r))) inside = true;
+            break;
+        }
+        case PrimitiveType::Arc: {
+            auto* a = static_cast<Arc*>(obj.get());
+            Point center = a->getCenter();
+            double r = a->getRadius();
+            // Проверяем bounding box дуги
+            if (check(Point(center.getX()-r, center.getY()-r)) && 
+                check(Point(center.getX()+r, center.getY()+r))) inside = true;
+            break;
+        }
+        case PrimitiveType::Rectangle: {
+            auto* r = static_cast<Rectangle*>(obj.get());
+            Point tl = r->getTopLeft();
+            if (check(tl) &&
+                check(Point(tl.getX()+r->getWidth(), tl.getY())) &&
+                check(Point(tl.getX(), tl.getY()-r->getHeight())) &&
+                check(Point(tl.getX()+r->getWidth(), tl.getY()-r->getHeight()))) inside = true;
+            break;
+        }
+        case PrimitiveType::Ellipse: {
+            auto* e = static_cast<Ellipse*>(obj.get());
+            Point center = e->getCenter();
+            double rx = e->getRadiusX();
+            double ry = e->getRadiusY();
+            if (check(Point(center.getX()-rx, center.getY()-ry)) && 
+                check(Point(center.getX()+rx, center.getY()+ry))) inside = true;
+            break;
+        }
+        case PrimitiveType::Polygon: {
+            auto* p = static_cast<PolygonObj*>(obj.get());
+            Point c = p->getCenter(); double r = p->getRadius();
+            if (check(Point(c.getX()-r, c.getY()-r)) && check(Point(c.getX()+r, c.getY()+r))) inside = true;
+            break;
+        }
+        case PrimitiveType::Spline: {
+            auto* sp = static_cast<Spline*>(obj.get());
+            const auto& pts = sp->getPoints();
+            if (!pts.empty()) {
+                // Проверяем все контрольные точки
+                bool allInside = true;
+                for (const auto& p : pts) {
+                    if (!check(p)) { allInside = false; break; }
+                }
+                if (allInside) inside = true;
+            }
+            break;
+        }
+        default: break;
+        }
 
-// Рассчитывает шаг сетки, видимый на экране, для отображения на инфо-панели.
-double Viewport::calculateDynamicGridStep() const
-{
-    double dynamicGridStep = m_gridStep;
-    while (dynamicGridStep * m_zoomFactor < 25) {
-        dynamicGridStep *= 5;
+        if (inside) {
+            result.push_back(obj.get());
+        }
     }
-    while (dynamicGridStep * m_zoomFactor > 125) {
-        dynamicGridStep /= 5;
-    }
-    return dynamicGridStep;
+    return result;
 }
 
-// Обновляет текст на информационной панели.
-void Viewport::updateInfoLabel()
-{
-    QString infoText;
+void Viewport::updateInfoLabel() {
+    QString coordText;
     if (m_coordSystemType == CoordinateSystemType::Cartesian) {
-        infoText = QString("X: %1\nY: %2")
-        .arg(m_currentMouseWorldPos.x(), 0, 'f', 2)
-            .arg(m_currentMouseWorldPos.y(), 0, 'f', 2);
+        coordText = QString("X: %1\nY: %2").arg(m_currentMouseWorldPos.x(), 0, 'f', 2).arg(m_currentMouseWorldPos.y(), 0, 'f', 2);
     } else {
         Point p(m_currentMouseWorldPos.x(), m_currentMouseWorldPos.y());
-        QString angleUnit = (Point::getAngleUnit() == AngleUnit::Degrees) ? "°" : " rad";
-        infoText = QString("R: %1\nA: %2%3")
-                       .arg(p.getRadius(), 0, 'f', 2)
-                       .arg(p.getAngle(), 0, 'f', 2)
-                       .arg(angleUnit);
+        Point::setAngleUnit(AngleUnit::Degrees);
+        coordText = QString("R: %1\nA: %2°").arg(p.getRadius(), 0, 'f', 2).arg(p.getAngle(), 0, 'f', 2);
     }
-
-    infoText += QString("\nGrid: %1 px").arg(calculateDynamicGridStep());
-    m_infoLabel->setText(infoText);
+    QString zoomText = QString("Zoom: %1%").arg((int)(m_camera->getZoomFactor() * 100));
+    QString gridText = QString("Grid: %1").arg(m_gridStep);
+    m_infoLabel->setText(QString("%1\n%2\n%3").arg(coordText, zoomText, gridText));
 }
+
+void Viewport::drawGrid(QPainter& painter, const QTransform& transform) {
+    QPen gridPen(QColor(50, 52, 71), 1.0); QPen axisXPen(QColor("#F92672"), 1.5); QPen axisYPen(QColor("#66D9EF"), 1.5);
+    painter.save(); painter.setTransform(transform);
+    QTransform screenToWorldTf = transform.inverted(); QRectF visibleWorldRect = screenToWorldTf.mapRect(rect());
+    double step = calculateDynamicGridStep();
+    double startX = std::floor(visibleWorldRect.left() / step) * step; double endX = std::ceil(visibleWorldRect.right() / step) * step;
+    double startY = std::floor(visibleWorldRect.top() / step) * step; double endY = std::ceil(visibleWorldRect.bottom() / step) * step;
+    for (double x = startX; x <= endX; x += step) { if (std::abs(x) < 1e-9) painter.setPen(axisYPen); else painter.setPen(gridPen); painter.drawLine(QPointF(x, startY), QPointF(x, endY)); }
+    for (double y = startY; y <= endY; y += step) { if (std::abs(y) < 1e-9) painter.setPen(axisXPen); else painter.setPen(gridPen); painter.drawLine(QPointF(startX, y), QPointF(endX, y)); }
+    painter.restore();
+}
+void Viewport::drawGizmo(QPainter& painter) {
+    painter.save(); painter.setRenderHint(QPainter::Antialiasing);
+    int size = 40; int padding = 50; QPoint origin(padding, height() - padding);
+    QTransform gizmoTransform; gizmoTransform.translate(origin.x(), origin.y());
+    gizmoTransform.rotate(-m_camera->getRotationAngle()); gizmoTransform.scale(1, -1);
+    QPen axisXPen(QColor("#F92672"), 2.0); QPen axisYPen(QColor("#66D9EF"), 2.0);
+    painter.setTransform(gizmoTransform); painter.setPen(axisXPen); painter.setBrush(QColor("#F92672")); painter.drawLine(0, 0, size, 0);
+    QPolygonF xArrow; xArrow << QPointF(size, 0) << QPointF(size - 8, 4) << QPointF(size - 8, -4); painter.drawPolygon(xArrow); painter.resetTransform();
+    QPointF xPos = gizmoTransform.map(QPointF(size + 10, 0)); painter.setPen(Qt::white); painter.drawText(xPos, "X");
+    painter.setTransform(gizmoTransform); painter.setPen(axisYPen); painter.setBrush(QColor("#66D9EF")); painter.drawLine(0, 0, 0, size);
+    QPolygonF yArrow; yArrow << QPointF(0, size) << QPointF(-4, size - 8) << QPointF(4, size - 8); painter.drawPolygon(yArrow); painter.resetTransform();
+    QPointF yPos = gizmoTransform.map(QPointF(0, size + 10)); painter.setPen(Qt::white); painter.drawText(yPos, "Y");
+    painter.setPen(Qt::NoPen); painter.setBrush(Qt::white); painter.drawEllipse(origin, 3, 3); painter.restore();
+}
+QPointF Viewport::worldToScreen(const QPointF& worldPos) const { return m_camera->getWorldToScreenTransform().map(worldPos); }
+QPointF Viewport::screenToWorld(const QPointF& screenPos) const { return m_camera->getScreenToWorldTransform().map(screenPos); }
+QRect Viewport::getGizmoRect() const { return QRect(0, height() - 70, 70, 70); }
+double Viewport::calculateDynamicGridStep() const { double zoom = m_camera->getZoomFactor(); double step = m_gridStep; while (step * zoom < 15) step *= 2; while (step * zoom > 150) step /= 2; return step; }
+void Viewport::setDrawingStrategies(const std::map<PrimitiveType, std::unique_ptr<Draw>>* strategies) { m_drawingStrategies = strategies; }
+void Viewport::setGridStep(int step) { if (step > 0) { m_gridStep = step; update(); } }
+void Viewport::setZoomStep(double step) { if (step > 0) { m_zoomStep = step; } }
+void Viewport::setCoordinateSystem(CoordinateSystemType type) { m_coordSystemType = type; updateInfoLabel(); }
+void Viewport::setSelectedObjects(const std::vector<Object*>& objs) { m_selectedObjects = objs; update(); }
+void Viewport::update() { QWidget::update(); }
+void Viewport::onCameraUpdated() { updateInfoLabel(); update(); }
+void Viewport::showContextMenu(const QPoint& pos) { m_contextMenu->exec(mapToGlobal(pos)); }
+void Viewport::zoomIn() { m_camera->applyZoom(m_zoomStep, rect().center()); }
+void Viewport::zoomOut() { m_camera->applyZoom(1.0/m_zoomStep, rect().center()); }
+void Viewport::rotateLeft() { m_camera->rotateLeft(); }
+void Viewport::rotateRight() { m_camera->rotateRight(); }
+void Viewport::wheelEvent(QWheelEvent *event) { double factor = 1.0 + (event->angleDelta().y() / 8.0) / 100.0; m_camera->applyZoom(factor, event->position().toPoint()); }
+void Viewport::resizeEvent(QResizeEvent *event) { m_camera->setCanvasSize(event->size()); }
+void Viewport::zoomToExtents() { }

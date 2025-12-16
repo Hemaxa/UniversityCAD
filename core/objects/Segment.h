@@ -3,33 +3,35 @@
 #include "Object.h"
 #include "Point.h"
 
-// Класс для представления отрезка, определенного двумя точками.
+// Класс отрезка - линия между двумя точками.
 class Segment : public Object
 {
 public:
-    // Конструктор, создающий отрезок по начальной и конечной точкам.
+    // Конструктор: создает отрезок от start до end.
     Segment(const Point& start, const Point& end);
 
-    // Возвращает тип примитива (отрезок).
+    // Возвращает тип примитива.
     PrimitiveType getType() const override { return PrimitiveType::Segment; };
 
-    // Возвращает константную ссылку на начальную точку отрезка.
+    // Возвращает начальную точку отрезка.
     const Point& getStart() const;
-
     // Устанавливает начальную точку отрезка.
     void setStart(const Point& point);
 
-    // Возвращает константную ссылку на конечную точку отрезка.
+    // Возвращает конечную точку отрезка.
     const Point& getEnd() const;
-
     // Устанавливает конечную точку отрезка.
     void setEnd(const Point& point);
 
-private:
-    // Начальная точка отрезка.
-    Point m_start;
+    // Возвращает точки привязки (концы и середина).
+    std::vector<SnapPoint> getSnapPoints() const override;
 
-    // Конечная точка отрезка.
+    // Возвращает ближайшую точку на отрезке к заданной точке p.
+    Point getClosestPoint(const Point& p) const override;
+    // Возвращает точку перпендикуляра из точки p на отрезок.
+    std::optional<Point> getPerpendicularPoint(const Point& p) const override;
+
+private:
+    Point m_start;
     Point m_end;
 };
-
