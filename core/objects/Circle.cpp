@@ -30,3 +30,8 @@ Point Circle::getClosestPoint(const Point& p) const {
 std::vector<Point> Circle::getTangentPoints(const Point& p) const {
     return MathUtils::getTangentPoints(p, m_center, m_radius);
 }
+
+std::optional<std::pair<Point, Point>> Circle::getTangentSnapPoint(
+    const Point& prevPoint, const Point& mousePos) const {
+    return MathUtils::projectOnTangentLine(prevPoint, mousePos, m_center, m_radius);
+}

@@ -37,6 +37,9 @@ public:
 
     // Возвращает ближайшую точку на периметре к заданной точке p.
     Point getClosestPoint(const Point& p) const override;
+    
+    // Возвращает точку перпендикуляра из точки p к ближайшей стороне прямоугольника.
+    std::optional<Point> getPerpendicularPoint(const Point& p) const override;
 
 private:
     Point m_topLeft;

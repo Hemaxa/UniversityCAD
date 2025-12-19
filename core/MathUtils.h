@@ -3,6 +3,8 @@
 #include <cmath>
 #include <vector>
 #include <algorithm>
+#include <optional>
+#include <utility>
 
 namespace MathUtils {
 
@@ -131,4 +133,35 @@ inline bool getCircleCenterFrom2PointsAndRadius(const Point& p1, const Point& p2
     return true;
 }
 
+// Проецирует точку mousePos на касательную линию, проведённую из prevPoint к окружности.
+// Возвращает пару: (точка касания на окружности, проекция mousePos на касательную линию)
+// Если касательная не существует (точка внутри окружности), возвращает nullopt.
+inline std::optional<std::pair<Point, Point>> projectOnTangentLine(
+    const Point& prevPoint, const Point& mousePos, const Point& center, double r) {
+    
+    auto tangentPts = getTangentPoints(prevPoint, center, r);
+    if (tangentPts.empty()) return std::nullopt;
+    
+    // Выбираем ближайшую касательную к позиции мыши
+    Point bestTangentPt;
+    Point bestProjection;
+    double bestDist = 1e15;
+    
+    for (const auto& tangentPt : tangentPts) {
+        // Линия касательной: от prevPoint через tangentPt
+        // Проецируем mousePos на эту линию (бесконечную)
+        Point proj = projectPointOnLine(mousePos, prevPoint, tangentPt);
+        double d = distSq(mousePos, proj);
+        
+        if (d < bestDist) {
+            bestDist = d;
+            bestTangentPt = tangentPt;
+            bestProjection = proj;
+        }
+    }
+    
+    return std::make_pair(bestTangentPt, bestProjection);
 }
+
+}
+

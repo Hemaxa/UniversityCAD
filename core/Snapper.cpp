@@ -86,28 +86,16 @@ SnapResult Snapper::snap(const Point& mouseWorldPos, double scaleFactor, const s
                         result.type = SnapType::Perpendicular;
                     }
                 }
-                // Tangent
-                auto tans = obj->getTangentPoints(prevPoint.value());
-                for (const auto& p : tans) {
-                    double d = MathUtils::dist(mouseWorldPos, p);
-                    // "Sticky" tangent: if we are reasonably close to the tangent point, snap to it.
-                    // Prioritize slightly: if distances are similar, prefer Tangent for "stickiness"
-                    if (d < bestDist * 1.5) { // Bias towards Tangent slightly
-                        if (d < bestDist) bestDist = d;
-                        // Force snap if within range, even if bestDist was slightly better (up to bias)
-                        // Actually, just standard logic for now, but ensure it runs.
-                        // If d is very small, we update.
-                         if (d < minInfoDist) { // If it is valid snap
-                             // Update if better
-                             // OR if it is Tangent and we want to prioritize it?
-                             // Let's stick to distance minimization but allow competition.
-                             if (d <= bestDist) {
-                                bestDist = d;
-                                result.snapped = true;
-                                result.point = p;
-                                result.type = SnapType::Tangent;
-                             }
-                         }
+                // Tangent - теперь используем проекцию вдоль линии касательной
+                auto tangentSnap = obj->getTangentSnapPoint(prevPoint.value(), mouseWorldPos);
+                if (tangentSnap.has_value()) {
+                    auto [tangentPoint, projectedPoint] = tangentSnap.value();
+                    double d = MathUtils::dist(mouseWorldPos, projectedPoint);
+                    if (d < bestDist) {
+                        bestDist = d;
+                        result.snapped = true;
+                        result.point = projectedPoint;  // Проекция на линию, а не точка на кривой
+                        result.type = SnapType::Tangent;
                     }
                 }
             }

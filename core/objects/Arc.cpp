@@ -119,3 +119,53 @@ std::vector<Point> Arc::getTangentPoints(const Point& p) const {
     }
     return result;
 }
+
+std::optional<std::pair<Point, Point>> Arc::getTangentSnapPoint(
+    const Point& prevPoint, const Point& mousePos) const {
+    // Получаем все касательные к полной окружности
+    auto allTangents = MathUtils::getTangentPoints(prevPoint, m_center, m_radius);
+    if (allTangents.empty()) return std::nullopt;
+    
+    // Функция нормализации угла
+    auto norm = [](double a) {
+        a = std::fmod(a, 360.0);
+        if (a < 0) a += 360.0;
+        return a;
+    };
+    
+    // Фильтруем только те касательные, которые попадают на дугу
+    std::vector<Point> validTangents;
+    for (const auto& pt : allTangents) {
+        double dx = pt.getX() - m_center.getX();
+        double dy = pt.getY() - m_center.getY();
+        double angle = std::atan2(dy, dx) * 180.0 / M_PI;
+        double checkAngle = norm(angle);
+        double s = norm(m_startAngle);
+        
+        double diff = checkAngle - s;
+        if (diff < 0) diff += 360.0;
+        
+        bool inside = (diff <= std::abs(m_spanAngle) + 0.1);
+        if (inside) validTangents.push_back(pt);
+    }
+    
+    if (validTangents.empty()) return std::nullopt;
+    
+    // Выбираем ближайшую касательную к позиции мыши
+    Point bestTangentPt;
+    Point bestProjection;
+    double bestDist = 1e15;
+    
+    for (const auto& tangentPt : validTangents) {
+        Point proj = MathUtils::projectPointOnLine(mousePos, prevPoint, tangentPt);
+        double d = MathUtils::distSq(mousePos, proj);
+        
+        if (d < bestDist) {
+            bestDist = d;
+            bestTangentPt = tangentPt;
+            bestProjection = proj;
+        }
+    }
+    
+    return std::make_pair(bestTangentPt, bestProjection);
+}

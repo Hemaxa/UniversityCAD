@@ -83,3 +83,46 @@ Point Rectangle::getClosestPoint(const Point& p) const {
     }
     return closest;
 }
+
+std::optional<Point> Rectangle::getPerpendicularPoint(const Point& p) const {
+    double x = m_topLeft.getX();
+    double y = m_topLeft.getY();
+    double w = m_width;
+    double h = m_height;
+
+    // 4 стороны прямоугольника
+    Point edges[4][2] = {
+        {Point(x, y), Point(x + w, y)},         // Top
+        {Point(x + w, y), Point(x + w, y - h)}, // Right
+        {Point(x + w, y - h), Point(x, y - h)}, // Bottom
+        {Point(x, y - h), Point(x, y)}          // Left
+    };
+
+    std::optional<Point> bestPerp;
+    double bestDist = 1e15;
+
+    for (int i = 0; i < 4; ++i) {
+        const Point& a = edges[i][0];
+        const Point& b = edges[i][1];
+        
+        // Проецируем точку на линию (бесконечную)
+        Point proj = MathUtils::projectPointOnLine(p, a, b);
+        
+        // Проверяем, попадает ли проекция в пределы отрезка
+        double dSq = MathUtils::distSq(a, b);
+        if (dSq < 1e-9) continue; // Вырожденная сторона
+        
+        double t = ((proj.getX() - a.getX()) * (b.getX() - a.getX()) +
+                    (proj.getY() - a.getY()) * (b.getY() - a.getY())) / dSq;
+        
+        if (t >= 0.0 && t <= 1.0) {
+            double d = MathUtils::distSq(p, proj);
+            if (d < bestDist) {
+                bestDist = d;
+                bestPerp = proj;
+            }
+        }
+    }
+
+    return bestPerp;
+}

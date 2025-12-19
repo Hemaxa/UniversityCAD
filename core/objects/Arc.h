@@ -39,6 +39,9 @@ public:
     Point getClosestPoint(const Point& p) const override;
     // Возвращает точки касания из внешней точки p.
     std::vector<Point> getTangentPoints(const Point& p) const override;
+    // Возвращает проекцию на касательную линию.
+    std::optional<std::pair<Point, Point>> getTangentSnapPoint(
+        const Point& prevPoint, const Point& mousePos) const override;
 
 private:
     Point m_center;

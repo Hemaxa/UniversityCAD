@@ -81,3 +81,30 @@ std::vector<Point> Ellipse::getTangentPoints(const Point& p) const {
     
     return result;
 }
+
+std::optional<std::pair<Point, Point>> Ellipse::getTangentSnapPoint(
+    const Point& prevPoint, const Point& mousePos) const {
+    // Получаем точки касания к эллипсу
+    auto tangentPts = getTangentPoints(prevPoint);
+    if (tangentPts.empty()) return std::nullopt;
+    
+    // Выбираем ближайшую касательную к позиции мыши
+    Point bestTangentPt;
+    Point bestProjection;
+    double bestDist = 1e15;
+    
+    for (const auto& tangentPt : tangentPts) {
+        // Линия касательной: от prevPoint через tangentPt
+        // Проецируем mousePos на эту линию (бесконечную)
+        Point proj = MathUtils::projectPointOnLine(mousePos, prevPoint, tangentPt);
+        double d = MathUtils::distSq(mousePos, proj);
+        
+        if (d < bestDist) {
+            bestDist = d;
+            bestTangentPt = tangentPt;
+            bestProjection = proj;
+        }
+    }
+    
+    return std::make_pair(bestTangentPt, bestProjection);
+}

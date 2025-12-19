@@ -6,6 +6,7 @@
 #include <QString>
 #include <vector>
 #include <optional>
+#include <utility>
 
 // Точка привязки с информацией о типе.
 struct SnapPoint {
@@ -58,6 +59,11 @@ public:
 
     // Возвращает точки касания из точки p к объекту.
     virtual std::vector<Point> getTangentPoints(const Point& p) const { return {}; }
+
+    // Возвращает проекцию на касательную линию: (точка касания, проекция mousePos на линию касательной).
+    // prevPoint - начальная точка линии, mousePos - текущая позиция курсора.
+    virtual std::optional<std::pair<Point, Point>> getTangentSnapPoint(
+        const Point& prevPoint, const Point& mousePos) const { return std::nullopt; }
 
 private:
     QColor m_color = Qt::white;
