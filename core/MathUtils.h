@@ -40,20 +40,24 @@ inline bool getCircleFrom3Points(const Point& p1, const Point& p2, const Point& 
 }
 
 // Важно для привязок: Касательные
+// Вычисляет две точки касания на окружности, к которым можно провести касательные из внешней точки
 inline std::vector<Point> getTangentPoints(const Point& external, const Point& center, double r) {
     std::vector<Point> res;
     double d2 = distSq(external, center);
     double r2 = r * r;
-    if (d2 < r2) return res; // Точка внутри
+    if (d2 < r2 + EPSILON) return res; // Точка внутри или на окружности - касательных нет
 
     double dx = external.getX() - center.getX();
     double dy = external.getY() - center.getY();
-    double d = std::sqrt(d2); // Расстояние
+    double d = std::sqrt(d2); // Расстояние от внешней точки до центра
 
-    // Угол до центра окружности
+    // Угол от центра к внешней точке
     double beta = std::atan2(dy, dx);
-    // Угол отклонения касательной
-    double alpha = std::asin(r / d);
+    
+    // Угол отклонения касательной точки от линии центр-внешняя точка
+    // В прямоугольном треугольнике (P, O, T) с прямым углом в T:
+    // cos(угол при O) = смежный/гипотенуза = r/d
+    double alpha = std::acos(r / d);  // ИСПРАВЛЕНО: было asin, нужен acos
 
     double t1 = beta + alpha;
     double t2 = beta - alpha;

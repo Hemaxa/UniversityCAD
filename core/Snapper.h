@@ -5,6 +5,7 @@
 #include <vector>
 #include <memory>
 #include <optional>
+#include <utility>
 
 class Object;
 class Scene;
@@ -13,6 +14,9 @@ struct SnapResult {
     bool snapped = false;
     Point point;
     SnapType type = SnapType::None;
+    
+    // Для касательной: отображение пунктирного продолжения (tangentPoint, extensionEnd)
+    std::optional<std::pair<Point, Point>> tangentExtensionLine;
 };
 
 class Snapper {

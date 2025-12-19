@@ -42,6 +42,9 @@ private:
     std::optional<Point> m_startPoint;
     Point m_endPoint;
     std::unique_ptr<Object> m_result;
+    
+    // Для отрисовки пунктирного продолжения касательной
+    std::optional<std::pair<Point, Point>> m_tangentExtensionLine;
 };
 
 // --- Circle ---

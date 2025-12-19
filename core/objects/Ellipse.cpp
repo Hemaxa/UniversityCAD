@@ -68,7 +68,8 @@ std::vector<Point> Ellipse::getTangentPoints(const Point& p) const {
     
     double d = std::sqrt(d2);
     double beta = std::atan2(normY, normX);
-    double alpha = std::asin(1.0 / d);
+    // ИСПРАВЛЕНО: было asin, нужен acos (см. аналогичное исправление в MathUtils.h)
+    double alpha = std::acos(1.0 / d);
     
     double t1 = beta + alpha;
     double t2 = beta - alpha;

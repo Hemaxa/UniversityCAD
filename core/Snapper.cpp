@@ -86,16 +86,37 @@ SnapResult Snapper::snap(const Point& mouseWorldPos, double scaleFactor, const s
                         result.type = SnapType::Perpendicular;
                     }
                 }
-                // Tangent - теперь используем проекцию вдоль линии касательной
+                
+                // Tangent - ИСПРАВЛЕННАЯ ЛОГИКА:
+                // Срабатывает когда курсор близко к КАСАТЕЛЬНОЙ ЛИНИИ (не к кривой!)
+                // Это гарантирует что отрезок будет касаться окружности, а не проходить через неё
                 auto tangentSnap = obj->getTangentSnapPoint(prevPoint.value(), mouseWorldPos);
                 if (tangentSnap.has_value()) {
                     auto [tangentPoint, projectedPoint] = tangentSnap.value();
-                    double d = MathUtils::dist(mouseWorldPos, projectedPoint);
-                    if (d < bestDist) {
-                        bestDist = d;
+                    
+                    // Расстояние от курсора до касательной линии = расстояние до проекции
+                    double distToTangentLine = MathUtils::dist(mouseWorldPos, projectedPoint);
+                    
+                    // Срабатываем только если курсор близко к касательной ЛИНИИ
+                    if (distToTangentLine < minInfoDist && distToTangentLine < bestDist) {
+                        bestDist = distToTangentLine;
                         result.snapped = true;
-                        result.point = projectedPoint;  // Проекция на линию, а не точка на кривой
+                        result.point = projectedPoint;  // Проекция курсора на касательную линию
                         result.type = SnapType::Tangent;
+                        
+                        // Вычисляем точку расширения (продолжение линии от tangentPoint)
+                        double dx = tangentPoint.getX() - prevPoint.value().getX();
+                        double dy = tangentPoint.getY() - prevPoint.value().getY();
+                        double len = std::sqrt(dx * dx + dy * dy);
+                        if (len > 1e-9) {
+                            // Продлеваем линию на 500 единиц за точку касания
+                            double extLength = 500.0;
+                            Point extEnd(
+                                tangentPoint.getX() + (dx / len) * extLength,
+                                tangentPoint.getY() + (dy / len) * extLength
+                            );
+                            result.tangentExtensionLine = std::make_pair(tangentPoint, extEnd);
+                        }
                     }
                 }
             }

@@ -57,10 +57,21 @@ void CreateSegmentTool::onMousePress(const Point& worldPos, const Snapper& snapp
         m_result = std::make_unique<Segment>(m_startPoint.value(), m_endPoint);
         m_finished = true;
     }
+    m_tangentExtensionLine.reset();  // Сбрасываем при клике
 }
 
 void CreateSegmentTool::onMouseMove(const Point& worldPos, const Snapper& snapper, double scale) {
-    updateSnap(worldPos, snapper, scale, m_startPoint, m_endPoint, m_snapPoint, m_isSnapped);
+    auto res = snapper.snap(worldPos, scale, m_startPoint);
+    if (res.snapped) {
+        m_endPoint = res.point;
+        m_snapPoint = res.point;
+        m_isSnapped = true;
+        m_tangentExtensionLine = res.tangentExtensionLine;  // Сохраняем линию расширения
+    } else {
+        m_endPoint = worldPos;
+        m_isSnapped = false;
+        m_tangentExtensionLine.reset();
+    }
 }
 
 void CreateSegmentTool::draw(QPainter& painter, double scale) {
@@ -68,11 +79,28 @@ void CreateSegmentTool::draw(QPainter& painter, double scale) {
     if (m_startPoint.has_value()) {
         QPen pen(Qt::white, 1.0, Qt::DashLine); pen.setCosmetic(true); painter.setPen(pen);
         painter.drawLine(QPointF(m_startPoint->getX(), m_startPoint->getY()), QPointF(m_endPoint.getX(), m_endPoint.getY()));
+        
+        // Рисуем пунктирное продолжение касательной
+        if (m_tangentExtensionLine.has_value()) {
+            auto [tangentPt, extEnd] = m_tangentExtensionLine.value();
+            QPen extPen(Qt::cyan, 1.0, Qt::DotLine); 
+            extPen.setCosmetic(true); 
+            painter.setPen(extPen);
+            // Линия от точки касания до конца расширения
+            painter.drawLine(QPointF(tangentPt.getX(), tangentPt.getY()), 
+                             QPointF(extEnd.getX(), extEnd.getY()));
+            
+            // Маркер точки касания
+            double markerSize = 6.0 / scale;
+            painter.setPen(QPen(Qt::magenta, 2.0 / scale));
+            painter.setBrush(Qt::NoBrush);
+            painter.drawEllipse(QPointF(tangentPt.getX(), tangentPt.getY()), markerSize/2, markerSize/2);
+        }
     }
 }
 
 std::unique_ptr<Object> CreateSegmentTool::takeObject() { return std::move(m_result); }
-void CreateSegmentTool::reset() { m_finished = false; m_startPoint.reset(); }
+void CreateSegmentTool::reset() { m_finished = false; m_startPoint.reset(); m_tangentExtensionLine.reset(); }
 
 // --- Circle ---
 CreateCircleTool::CreateCircleTool(int method) : m_method(method) {}
