@@ -48,6 +48,11 @@ public:
     // Возвращает стиль линии объекта.
     virtual const LineStyle& getLineStyle() const { return m_style; }
 
+    // Устанавливает слой объекта.
+    virtual void setLayer(const QString& layer) { m_layer = layer; }
+    // Возвращает слой объекта.
+    virtual QString getLayer() const { return m_layer; }
+
     // Возвращает основные точки привязки (End, Mid, Center, Quadrant).
     virtual std::vector<SnapPoint> getSnapPoints() const { return {}; }
 
@@ -68,6 +73,7 @@ public:
 private:
     QColor m_color = Qt::white;
     LineStyle m_style;
+    QString m_layer = "0";
     unsigned int m_id = 0;
 };
 

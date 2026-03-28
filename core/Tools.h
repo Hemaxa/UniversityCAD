@@ -133,6 +133,19 @@ private:
     std::unique_ptr<Object> m_result;
 };
 
+// --- Point ---
+class CreatePointTool : public Tool {
+public:
+    void onMousePress(const Point& worldPos, const Snapper& snapper, double scale) override;
+    void onMouseMove(const Point& worldPos, const Snapper& snapper, double scale) override;
+    void draw(QPainter& painter, double scale) override;
+    std::unique_ptr<Object> takeObject() override;
+    void reset() override;
+private:
+    std::unique_ptr<Object> m_result;
+    Point m_cursorPos;
+};
+
 // --- Spline ---
 class CreateSplineTool : public Tool {
 public:

@@ -13,6 +13,7 @@
 #include "Polygon.h"
 #include "Ellipse.h"
 #include "Spline.h"
+#include "PointObject.h"
 #include "MathUtils.h"
 
 #include <QPainter>
@@ -96,6 +97,9 @@ void Viewport::setActiveTool(PrimitiveType type, int subMethod) {
         break;
     case PrimitiveType::Spline:
         m_currentTool = std::make_unique<CreateSplineTool>();
+        break;
+    case PrimitiveType::Point:
+        m_currentTool = std::make_unique<CreatePointTool>();
         break;
     default: m_currentTool.reset(); break;
     }
@@ -352,6 +356,11 @@ std::vector<Object*> Viewport::pickObjects(const QRect& screenRect) {
                 }
                 if (allInside) inside = true;
             }
+            break;
+        }
+        case PrimitiveType::Point: {
+            auto* pt = static_cast<PointObject*>(obj.get());
+            if (check(pt->getPosition())) inside = true;
             break;
         }
         default: break;

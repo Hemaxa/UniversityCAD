@@ -422,6 +422,26 @@ static void setupPen(QPainter& painter, const Object* obj, bool isSelected) {
 // Реализация отрисовки примитивов
 // =========================================================
 
+void PointDraw::draw(QPainter& painter, Object* primitive, bool isSelected) const {
+    auto* obj = static_cast<PointObject*>(primitive);
+    double scale = getScale(painter);
+    if (scale < 1e-9) scale = 1.0;
+    double s = 4.0 / scale; // Фиксированный экранный размер крестика
+    
+    QPen pen;
+    pen.setColor(isSelected ? QColor("#F92672") : obj->getColor());
+    pen.setWidthF(isSelected ? 2.0 / scale : 1.5 / scale);
+    painter.setPen(pen);
+    painter.setBrush(Qt::NoBrush);
+    
+    double x = obj->getPosition().getX();
+    double y = obj->getPosition().getY();
+    
+    // Рисуем × (крестик)
+    painter.drawLine(QPointF(x - s, y - s), QPointF(x + s, y + s));
+    painter.drawLine(QPointF(x + s, y - s), QPointF(x - s, y + s));
+}
+
 void SegmentDraw::draw(QPainter& painter, Object* primitive, bool isSelected) const {
     auto* s = static_cast<Segment*>(primitive);
     setupPen(painter, s, isSelected);

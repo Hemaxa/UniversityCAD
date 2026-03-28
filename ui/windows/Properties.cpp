@@ -7,6 +7,7 @@
 #include "Ellipse.h"
 #include "Polygon.h"
 #include "Spline.h"
+#include "PointObject.h"
 #include "StyleDialog.h"
 #include "LineSettingsMenu.h"
 #include "MathUtils.h"
@@ -70,6 +71,7 @@ Properties::Properties(QWidget *parent) : QWidget(parent), m_isCreationMode(true
     m_primitiveWidgets[PrimitiveType::Ellipse] = createEllipseWidget();
     m_primitiveWidgets[PrimitiveType::Polygon] = createPolygonWidget();
     m_primitiveWidgets[PrimitiveType::Spline] = createSplineWidget();
+    m_primitiveWidgets[PrimitiveType::Point] = createPointWidget();
 
     for (auto& pair : m_primitiveWidgets) {
         m_stack->addWidget(pair.second);
@@ -515,6 +517,16 @@ QWidget* Properties::createSplineWidget() {
     return w;
 }
 
+QWidget* Properties::createPointWidget() {
+    auto* gb = new QGroupBox("Точка");
+    auto* gl = setupGridLayout(gb);
+    m_ptX = createSpin(); m_ptY = createSpin();
+    auto* lx = createLbl("X:"); auto* ly = createLbl("Y:");
+    addRow(gl, 0, lx, m_ptX, ly, m_ptY);
+    m_coordLabels[PrimitiveType::Point] = { lx, ly };
+    return gb;
+}
+
 QGroupBox* Properties::createStyleWidget() {
     auto* group = new QGroupBox("Стиль");
     auto* grid = setupGridLayout(group);
@@ -529,8 +541,17 @@ QGroupBox* Properties::createStyleWidget() {
     m_colorButton->setStyleSheet("background-color: white; border: 1px solid gray;");
     connect(m_colorButton, &QPushButton::clicked, this, &Properties::onColorButtonClicked);
 
+    m_layerCombo = new QComboBox();
+    m_layerCombo->setEditable(true);
+    m_layerCombo->addItem("0");
+    m_layerCombo->setCurrentText("0");
+    connect(m_layerCombo, &QComboBox::currentTextChanged, this, [this](const QString& text){
+        m_selectedLayer = text;
+    });
+
     addRow(grid, 0, createLbl("Тип:"), m_stylePresetButton);
     addRow(grid, 1, createLbl("Цвет:"), m_colorButton);
+    addRow(grid, 2, createLbl("Слой:"), m_layerCombo);
     return group;
 }
 
@@ -641,6 +662,7 @@ void Properties::applyCurrentStyleTo(Object* obj) const {
     if(!obj) return;
     obj->setLineStyle(m_currentStyle);
     obj->setColor(m_selectedColor);
+    obj->setLayer(m_selectedLayer);
 }
 
 void Properties::showCreationPropertiesFor(PrimitiveType type, int methodIndex) {
@@ -688,6 +710,7 @@ void Properties::showCreationPropertiesFor(PrimitiveType type, int methodIndex) 
 
     m_stylePresetButton->setText(m_currentStyle.name);
     m_colorButton->setStyleSheet(QString("background-color: %1").arg(m_selectedColor.name()));
+    m_layerCombo->setCurrentText(m_selectedLayer);
 }
 
 void Properties::showEditingPropertiesFor(const std::vector<Object*>& objects) {
@@ -780,12 +803,18 @@ void Properties::populateFields(Object* obj) {
     case PrimitiveType::Spline: {
         auto* sp = static_cast<Spline*>(obj);
         const auto& pts = sp->getPoints();
-        clearAllSplinePoints();  // Очищаем все точки безопасно
+        clearAllSplinePoints();
         for(const auto& p : pts) {
             onAddSplinePoint();
             m_splineSpinBoxes.back().first->setValue(p.getX());
             m_splineSpinBoxes.back().second->setValue(p.getY());
         }
+        break;
+    }
+    case PrimitiveType::Point: {
+        auto* pt = static_cast<PointObject*>(obj);
+        m_ptX->setValue(pt->getPosition().getX());
+        m_ptY->setValue(pt->getPosition().getY());
         break;
     }
     default: break;
@@ -817,6 +846,22 @@ void Properties::populateStyleFields(const std::vector<Object*>& objects) {
         m_stylePresetButton->setText(firstStyle.name);
     } else {
         m_stylePresetButton->setText("Разные типы");
+    }
+
+    // Слой
+    bool sameLayer = true;
+    QString firstLayer = objects[0]->getLayer();
+    for(auto* obj : objects) {
+        if(obj->getLayer() != firstLayer) { sameLayer = false; break; }
+    }
+    if (sameLayer) {
+        m_selectedLayer = firstLayer;
+        m_layerCombo->setCurrentText(firstLayer);
+        // Добавляем слой в список если его нет
+        if (m_layerCombo->findText(firstLayer) == -1)
+            m_layerCombo->addItem(firstLayer);
+    } else {
+        m_layerCombo->setCurrentText("");
     }
 }
 
@@ -948,6 +993,12 @@ void Properties::updateObjectGeometry(Object* obj) {
         }
         break;
     }
+    case PrimitiveType::Point: {
+        if (auto* pt = dynamic_cast<PointObject*>(obj)) {
+            pt->setPosition(readPoint(m_ptX, m_ptY));
+        }
+        break;
+    }
     default: break;
     }
 }
@@ -964,6 +1015,7 @@ void Properties::onApplyClicked() {
         case PrimitiveType::Ellipse: newObj = std::make_unique<Ellipse>(Point(), 10, 5); break;
         case PrimitiveType::Polygon: newObj = std::make_unique<PolygonObj>(Point(), 10, 5); break;
         case PrimitiveType::Spline: newObj = std::make_unique<Spline>(std::vector<Point>()); break;
+        case PrimitiveType::Point: newObj = std::make_unique<PointObject>(Point()); break;
         default: break;
         }
 
@@ -982,6 +1034,11 @@ void Properties::onApplyClicked() {
             }
             if (m_selectedColor.isValid()) {
                 obj->setColor(m_selectedColor);
+            }
+            // Применяем слой
+            QString layerText = m_layerCombo->currentText().trimmed();
+            if (!layerText.isEmpty()) {
+                obj->setLayer(layerText);
             }
             if (m_currentObjects.size() == 1) updateObjectGeometry(obj);
         }

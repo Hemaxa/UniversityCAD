@@ -9,6 +9,13 @@
 #include "Ellipse.h"
 #include "Polygon.h"
 #include "Spline.h"
+#include "PointObject.h"
+
+// --- Point ---
+class PointDraw : public Draw {
+public:
+    void draw(QPainter& painter, Object* primitive, bool isSelected) const override;
+};
 
 // --- Segment (Логика перенесена сюда) ---
 class SegmentDraw : public Draw {

@@ -27,6 +27,7 @@ public:
 
     LineStyle getCurrentStyle() const { return m_currentStyle; }
     QColor getCurrentColor() const { return m_selectedColor; }
+    QString getCurrentLayer() const { return m_selectedLayer; }
     void applyCurrentStyleTo(Object* obj) const;
 
 public slots:
@@ -61,6 +62,7 @@ private:
     QWidget* createEllipseWidget();
     QWidget* createPolygonWidget();
     QWidget* createSplineWidget();
+    QWidget* createPointWidget();
     QGroupBox* createStyleWidget();
 
     void populateFields(Object* obj);
@@ -109,9 +111,14 @@ private:
     QPushButton* m_stylePresetButton;
     // Убран m_lineWidthSpin (теперь глобально)
     QPushButton* m_colorButton;
+    QComboBox* m_layerCombo;
+
+    // Поля для точки
+    QDoubleSpinBox *m_ptX, *m_ptY;
 
     CoordinateSystemType m_coordSystem = CoordinateSystemType::Cartesian;
     QColor m_selectedColor = Qt::white;
+    QString m_selectedLayer = "0";
     LineStyle m_currentStyle;
     std::vector<LineStyle> m_availableStyles;
     std::vector<Object*> m_currentObjects;

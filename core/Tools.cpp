@@ -7,6 +7,7 @@
 #include "Ellipse.h"
 #include "Polygon.h"
 #include "Spline.h"
+#include "PointObject.h"
 #include "MathUtils.h"
 #include "Properties.h"
 #include <cmath>
@@ -731,3 +732,30 @@ void CreateSplineTool::draw(QPainter& painter, double scale) {
 
 std::unique_ptr<Object> CreateSplineTool::takeObject() { return std::move(m_result); }
 void CreateSplineTool::reset() { m_finished = false; m_points.clear(); }
+
+// --- Point ---
+void CreatePointTool::onMousePress(const Point& worldPos, const Snapper& snapper, double scale) {
+    Point target;
+    updateSnap(worldPos, snapper, scale, std::nullopt, target, m_snapPoint, m_isSnapped);
+    m_result = std::make_unique<PointObject>(target);
+    m_finished = true;
+}
+
+void CreatePointTool::onMouseMove(const Point& worldPos, const Snapper& snapper, double scale) {
+    updateSnap(worldPos, snapper, scale, std::nullopt, m_cursorPos, m_snapPoint, m_isSnapped);
+}
+
+void CreatePointTool::draw(QPainter& painter, double scale) {
+    if (m_isSnapped) drawSnapMarker(painter, m_snapPoint, scale);
+    // Рисуем крестик-превью в позиции курсора
+    double s = 4.0 / scale;
+    QPen pen(Qt::white, 1.5 / scale);
+    painter.setPen(pen);
+    painter.drawLine(QPointF(m_cursorPos.getX() - s, m_cursorPos.getY() - s),
+                     QPointF(m_cursorPos.getX() + s, m_cursorPos.getY() + s));
+    painter.drawLine(QPointF(m_cursorPos.getX() + s, m_cursorPos.getY() - s),
+                     QPointF(m_cursorPos.getX() - s, m_cursorPos.getY() + s));
+}
+
+std::unique_ptr<Object> CreatePointTool::takeObject() { return std::move(m_result); }
+void CreatePointTool::reset() { m_finished = false; }

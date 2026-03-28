@@ -39,9 +39,12 @@ public:
     // Возвращает точку перпендикуляра из точки p на ближайшую сторону.
     std::optional<Point> getPerpendicularPoint(const Point& p) const override;
 
-private:
     // Вычисляет вершины многоугольника.
     std::vector<Point> getVertices() const;
+
+private:
+
+
 
     Point m_center;
     double m_radius;

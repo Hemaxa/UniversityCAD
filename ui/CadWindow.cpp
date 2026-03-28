@@ -4,11 +4,17 @@
 #include "Properties.h"
 #include "Scene.h"
 #include "PrimitiveStrategies.h"
+#include "PointObject.h"
 #include "Segment.h"
+#include "DxfExporter.h"
+#include "DxfImporter.h"
 
 #include <QSplitter>
 #include <QGuiApplication>
 #include <QShortcut>
+#include <QMenuBar>
+#include <QFileDialog>
+#include <QMessageBox>
 
 CadWindow::CadWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -42,6 +48,13 @@ void CadWindow::setupUi() {
     m_mainSplitter->addWidget(m_viewportPanel);
     m_mainSplitter->addWidget(m_rightColumnSplitter);
     m_mainSplitter->setStretchFactor(0, 1);
+
+    auto* menuBar = this->menuBar();
+    auto* fileMenu = menuBar->addMenu("Файл");
+    auto* importAction = fileMenu->addAction("Импорт DXF...");
+    connect(importAction, &QAction::triggered, this, &CadWindow::onImportDxf);
+    auto* exportAction = fileMenu->addAction("Экспорт DXF...");
+    connect(exportAction, &QAction::triggered, this, &CadWindow::onExportDxf);
 
     setCentralWidget(m_mainSplitter);
     resize(1200, 800);
@@ -77,6 +90,7 @@ void CadWindow::setupDrawingStrategies() {
     m_drawingStrategies[PrimitiveType::Ellipse] = std::make_unique<EllipseDraw>();
     m_drawingStrategies[PrimitiveType::Polygon] = std::make_unique<PolygonDraw>();
     m_drawingStrategies[PrimitiveType::Spline] = std::make_unique<SplineDraw>();
+    m_drawingStrategies[PrimitiveType::Point] = std::make_unique<PointDraw>();
 }
 
 void CadWindow::onPrimitiveTypeSelected(PrimitiveType type, int methodIndex) {
@@ -146,3 +160,29 @@ void CadWindow::onEscapePressed() {
 
 void CadWindow::onGridStepChanged(int step) { m_viewportPanel->setGridStep(step); }
 void CadWindow::onAngleUnitChanged(AngleUnit unit) { Point::setAngleUnit(unit); }
+
+void CadWindow::onImportDxf() {
+    QString fileName = QFileDialog::getOpenFileName(this, "Импорт DXF", "", "DXF Files (*.dxf);;All Files (*)");
+    if (!fileName.isEmpty()) {
+        if (DxfImporter::importScene(m_scene, fileName)) {
+            m_viewportPanel->update();
+            emit sceneChanged(m_scene);
+        } else {
+            QMessageBox::warning(this, "Ошибка импорта", "Не удалось импортировать файл DXF.");
+        }
+    }
+}
+
+void CadWindow::onExportDxf() {
+    QString fileName = QFileDialog::getSaveFileName(this, "Экспорт DXF", "", "DXF Files (*.dxf);;All Files (*)");
+    if (!fileName.isEmpty()) {
+        if (!fileName.endsWith(".dxf", Qt::CaseInsensitive)) {
+            fileName += ".dxf";
+        }
+        if (DxfExporter::exportScene(m_scene, fileName)) {
+            QMessageBox::information(this, "Успех", "Сцена успешно экспортирована.");
+        } else {
+            QMessageBox::warning(this, "Ошибка экспорта", "Не удалось экспортировать файл DXF.");
+        }
+    }
+}

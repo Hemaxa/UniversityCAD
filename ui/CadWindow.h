@@ -48,6 +48,10 @@ private slots:
     void onObjectCreateRequested(Object* obj);
     // Обработчик нажатия Escape (сброс выделения/инструмента).
     void onEscapePressed();
+    // Обработчик импорта DXF.
+    void onImportDxf();
+    // Обработчик экспорта DXF.
+    void onExportDxf();
 
 signals:
     // Сигнал об изменении сцены.

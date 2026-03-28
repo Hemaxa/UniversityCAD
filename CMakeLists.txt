@@ -44,6 +44,10 @@ target_sources (UniversityCAD PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/core/GlobalSettings.h
     ${CMAKE_CURRENT_SOURCE_DIR}/core/Scene.h
     ${CMAKE_CURRENT_SOURCE_DIR}/core/Scene.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/DxfExporter.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/DxfExporter.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/DxfImporter.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/DxfImporter.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/core/Snapper.h
     ${CMAKE_CURRENT_SOURCE_DIR}/core/Snapper.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/core/Tools.h
@@ -66,6 +70,8 @@ target_sources (UniversityCAD PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Point.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Segment.h
     ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Segment.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/PointObject.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/PointObject.cpp
 )
 
 target_include_directories(UniversityCAD PRIVATE

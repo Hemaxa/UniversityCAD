@@ -97,6 +97,7 @@ Control::Control(QWidget *parent) : QWidget(parent)
     addTool(":/icons/ellipse-1.svg", "Эллипс", PrimitiveType::Ellipse, {{":/icons/ellipse-1.svg", 0}, {":/icons/ellipse-2.svg", 1}});
     addTool(":/icons/polygon.svg", "Многоугольник", PrimitiveType::Polygon, {});
     addTool(":/icons/spline.svg", "Сплайн", PrimitiveType::Spline, {});
+    addTool(":/icons/point.svg", "Точка", PrimitiveType::Point, {});
 
     auto* objectsGroup = new QGroupBox("Список объектов"); auto* objectsLayout = new QVBoxLayout(objectsGroup);
     m_objectListWidget = new QListWidget(); m_objectListWidget->setSelectionMode(QAbstractItemView::ExtendedSelection); m_objectListWidget->setMinimumHeight(150);
@@ -189,6 +190,7 @@ void Control::updateObjectList(const Scene* scene) {
             case PrimitiveType::Ellipse: name="Эллипс"; break;
             case PrimitiveType::Polygon: name="Полигон"; break;
             case PrimitiveType::Spline: name="Сплайн"; break;
+            case PrimitiveType::Point: name="Точка"; break;
             default: name="Объект"; break;
             }
             QListWidgetItem* item = new QListWidgetItem(QString("%1 %2").arg(name).arg(obj->getID()));
