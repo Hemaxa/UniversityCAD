@@ -101,13 +101,13 @@ Properties::Properties(QWidget *parent) : QWidget(parent), m_isCreationMode(true
     // Стили (без width)
     m_availableStyles = {
         {LineStyleType::SolidMain, "Сплошная основная", 0, 0, true},
-        {LineStyleType::SolidThin, "Сплошная тонкая", 0, 0, true},
-        {LineStyleType::SolidWavy, "Сплошная волнистая", 0, 0, true},
-        {LineStyleType::SolidZigZag, "Сплошная с изломами", 0, 0, true},
-        {LineStyleType::Dashed, "Штриховая", 4.0, 2.0, true},
-        {LineStyleType::DashDotThin, "Штрихпунктирная тонкая", 10.0, 3.0, true},
+        {LineStyleType::SolidThin, "Сплошная тонкая", 0, 0, false},
+        {LineStyleType::SolidWavy, "Сплошная волнистая", 0, 0, false},
+        {LineStyleType::SolidZigZag, "Сплошная с изломами", 0, 0, false},
+        {LineStyleType::Dashed, "Штриховая", 4.0, 2.0, false},
+        {LineStyleType::DashDotThin, "Штрихпунктирная тонкая", 10.0, 3.0, false},
         {LineStyleType::DashDotThick, "Штрихпунктирная толстая", 10.0, 3.0, true},
-        {LineStyleType::DashDotDot, "С двумя точками", 10.0, 3.0, true}
+        {LineStyleType::DashDotDot, "С двумя точками", 10.0, 3.0, false}
     };
     m_currentStyle = m_availableStyles[0];
 

@@ -329,25 +329,29 @@ static void setupPen(QPainter& painter, const Object* obj, bool isSelected) {
     pen.setCapStyle(Qt::FlatCap);
     pen.setCosmetic(true);
 
-    // Определяем базовую толщину
+    // Определяем базовую толщину (в мм)
     double baseWidth;
     
     // Если стиль имеет кастомную толщину (> 0), используем её
     if (style.customWidth > 0) {
         baseWidth = style.customWidth;
     } else {
-        // Иначе используем глобальные настройки
-        // Основные/толстые линии используют mainLineWidth, тонкие используют thinLineWidth
-        if (style.isMain || style.type == LineStyleType::SolidMain || style.type == LineStyleType::DashDotThick) {
-            baseWidth = global.mainLineWidth;
-        } else {
-            baseWidth = global.thinLineWidth;
-        }
+        // Толстые типы: SolidMain и DashDotThick
+        // Все остальные — тонкие (SolidThin, Dashed, DashDotThin, DashDotDot, Wavy, ZigZag)
+        bool isThick = (style.type == LineStyleType::SolidMain || style.type == LineStyleType::DashDotThick);
+        baseWidth = isThick ? global.mainLineWidth : global.thinLineWidth;
     }
 
     // Применяем ОБЩИЙ глобальный масштаб толщины
     double s = baseWidth * global.globalWidthScale;
-    if (s < 0.25) s = 0.25; // Минимальная видимая толщина по ГОСТ
+    
+    // Cosmetic pen использует пиксели, а не мм. Переводим мм → пиксели.
+    // Стандартный экран ~ 96 DPI → 1 мм ≈ 3.78 px.
+    // Используем коэффициент, чтобы толщина линий на экране соответствовала реальным мм.
+    constexpr double mmToPx = 96.0 / 25.4; // ≈ 3.78 px/mm
+    s *= mmToPx;
+    
+    if (s < 1.0) s = 1.0; // Минимальная видимая толщина — 1 пиксель
 
     QVector<qreal> dashes;
     // Глобальный масштаб штрихов (LTSCALE)

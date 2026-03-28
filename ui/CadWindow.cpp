@@ -164,6 +164,7 @@ void CadWindow::onAngleUnitChanged(AngleUnit unit) { Point::setAngleUnit(unit); 
 void CadWindow::onImportDxf() {
     QString fileName = QFileDialog::getOpenFileName(this, "Импорт DXF", "", "DXF Files (*.dxf);;All Files (*)");
     if (!fileName.isEmpty()) {
+        m_scene->clear();  // Очищаем сцену перед импортом
         if (DxfImporter::importScene(m_scene, fileName)) {
             m_viewportPanel->update();
             emit sceneChanged(m_scene);

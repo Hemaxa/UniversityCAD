@@ -18,6 +18,9 @@ public:
     // Удаляет указанный примитив со сцены.
     void removePrimitive(Object* primitiveToRemove);
 
+    // Очищает сцену (удаляет все примитивы).
+    void clear();
+
     // Возвращает константную ссылку на вектор всех примитивов на сцене.
     const std::vector<std::unique_ptr<Object>>& getPrimitives() const;
 

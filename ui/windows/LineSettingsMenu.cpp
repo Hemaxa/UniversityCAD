@@ -93,16 +93,16 @@ void LineSettingsMenu::setupUi() {
     auto* globalGroup = new QGroupBox("Общие настройки (для всех линий)");
     auto* globalForm = new QFormLayout(globalGroup);
 
-    // Толщина основной линии (s): 0.5-1.4 мм, по умолчанию 0.8 мм
-    auto* mainWidth = createDoubleSpin(GlobalSettings::instance().mainLineWidth, 0.5, 1.4, 0.01);
+    // Толщина основной линии (s): 0.5-2.0 мм, по умолчанию 1.2 мм
+    auto* mainWidth = createDoubleSpin(GlobalSettings::instance().mainLineWidth, 0.5, 2.0, 0.05);
     mainWidth->setSuffix(" мм");
     connect(mainWidth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [](double v){ 
         GlobalSettings::instance().mainLineWidth = v; 
     });
     globalForm->addRow("Толщина основной (s):", mainWidth);
     
-    // Толщина тонкой линии (s/2): 0.25-0.7 мм, по умолчанию 0.4 мм
-    auto* thinWidth = createDoubleSpin(GlobalSettings::instance().thinLineWidth, 0.25, 0.7, 0.01);
+    // Толщина тонкой линии (s/3..s/2): 0.1-0.7 мм, по умолчанию 0.3 мм
+    auto* thinWidth = createDoubleSpin(GlobalSettings::instance().thinLineWidth, 0.1, 0.7, 0.05);
     thinWidth->setSuffix(" мм");
     connect(thinWidth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [](double v){ 
         GlobalSettings::instance().thinLineWidth = v; 

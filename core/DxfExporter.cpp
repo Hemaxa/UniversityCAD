@@ -76,17 +76,35 @@ static int getTrueColor24Bit(const QColor& color) {
 
 // ============================================================
 // Определение толщины линии в DXF (код 370, в сотых долях мм)
+// Использует реальные настройки из GlobalSettings для точного экспорта.
 // ============================================================
 static int getDxfLineWeight(const Object* obj) {
     const auto& style = obj->getLineStyle();
+    const auto& global = GlobalSettings::instance();
+    
+    double widthMm;
     if (style.customWidth > 0) {
-        return static_cast<int>(style.customWidth * 100);
+        widthMm = style.customWidth;
+    } else {
+        bool isThick = (style.type == LineStyleType::SolidMain || style.type == LineStyleType::DashDotThick);
+        widthMm = isThick ? global.mainLineWidth : global.thinLineWidth;
     }
-    // Основные/толстые линии — 0.50 мм, тонкие — 0.25 мм
-    if (style.isMain || style.type == LineStyleType::SolidMain || style.type == LineStyleType::DashDotThick) {
-        return 50;
+    
+    // Применяем глобальный масштаб
+    widthMm *= global.globalWidthScale;
+    
+    // DXF код 370 — в сотых долях мм, округляем к ближайшему стандартному значению
+    int raw = static_cast<int>(std::round(widthMm * 100));
+    
+    // Стандартные значения lineweight в DXF: 0, 5, 9, 13, 15, 18, 20, 25, 30, 35, 40, 50, 53, 60, 70, 80, 90, 100, 106, 120, 140, 158, 200, 211
+    static const int standard[] = {0, 5, 9, 13, 15, 18, 20, 25, 30, 35, 40, 50, 53, 60, 70, 80, 90, 100, 106, 120, 140, 158, 200, 211};
+    int best = standard[0];
+    int bestDist = std::abs(raw - best);
+    for (int s : standard) {
+        int d = std::abs(raw - s);
+        if (d < bestDist) { bestDist = d; best = s; }
     }
-    return 25;
+    return best;
 }
 
 static bool isSpecialLineType(LineStyleType type) {

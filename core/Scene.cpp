@@ -30,6 +30,13 @@ void Scene::removePrimitive(Object* primitiveToRemove)
         m_primitives.end());
 }
 
+// Очищает сцену.
+void Scene::clear()
+{
+    m_primitives.clear();
+    m_nextId = 1;
+}
+
 // Возвращает константную ссылку на вектор всех примитивов.
 const std::vector<std::unique_ptr<Object>>& Scene::getPrimitives() const
 {
