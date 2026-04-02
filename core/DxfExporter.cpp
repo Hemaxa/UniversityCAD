@@ -315,6 +315,13 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
 
     QTextStream out(&file);
     out.setLocale(QLocale::c());
+    out.setRealNumberNotation(QTextStream::FixedNotation);
+    out.setRealNumberPrecision(10);
+
+    int handleCounter = 1;
+    auto nextHandle = [&handleCounter]() -> QString {
+        return QString::number(handleCounter++, 16).toUpper();
+    };
 
     // Лямбда для записи DXF-пары (код, значение)
     auto writeCode = [&out](int code, const auto& value) {
@@ -343,8 +350,8 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
     writeCode(2, "HEADER");
     writeCode(9, "$ACADVER");
     writeCode(1, "AC1015");
-    writeCode(9, "$HANDLING");
-    writeCode(70, 0);
+    writeCode(9, "$HANDSEED");
+    writeCode(5, "FFFF");
     writeCode(9, "$LTSCALE");
     writeCode(40, 1.0);
     writeCode(0, "ENDSEC");
@@ -353,13 +360,55 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
     writeCode(0, "SECTION");
     writeCode(2, "TABLES");
 
+    // --- VPORT TABLE ---
+    writeCode(0, "TABLE");
+    writeCode(2, "VPORT");
+    writeCode(5, nextHandle());
+    writeCode(100, "AcDbSymbolTable");
+    writeCode(70, 1);
+    writeCode(0, "VPORT");
+    writeCode(5, nextHandle());
+    writeCode(100, "AcDbSymbolTableRecord");
+    writeCode(100, "AcDbViewportTableRecord");
+    writeCode(2, "*ACTIVE");
+    writeCode(70, 0);
+    writeCode(10, 0.0); writeCode(20, 0.0);
+    writeCode(11, 1.0); writeCode(21, 1.0);
+    writeCode(12, 0.0); writeCode(22, 0.0);
+    writeCode(13, 0.0); writeCode(23, 0.0);
+    writeCode(14, 10.0); writeCode(24, 10.0);
+    writeCode(15, 10.0); writeCode(25, 10.0);
+    writeCode(16, 0.0); writeCode(26, 0.0); writeCode(36, 1.0);
+    writeCode(17, 0.0); writeCode(27, 0.0); writeCode(37, 0.0);
+    writeCode(40, 1000.0);
+    writeCode(41, 1.0);
+    writeCode(42, 50.0);
+    writeCode(43, 0.0);
+    writeCode(44, 0.0);
+    writeCode(50, 0.0);
+    writeCode(51, 0.0);
+    writeCode(71, 0);
+    writeCode(72, 100);
+    writeCode(73, 1);
+    writeCode(74, 3);
+    writeCode(75, 0);
+    writeCode(76, 1);
+    writeCode(77, 0);
+    writeCode(78, 0);
+    writeCode(0, "ENDTAB");
+
     // --- LTYPE TABLE ---
     writeCode(0, "TABLE");
     writeCode(2, "LTYPE");
+    writeCode(5, nextHandle());
+    writeCode(100, "AcDbSymbolTable");
     writeCode(70, 4);
 
-    auto writeLType = [&writeCode](const QString& name, const QString& desc) {
+    auto writeLType = [&](const QString& name, const QString& desc) {
         writeCode(0, "LTYPE");
+        writeCode(5, nextHandle());
+        writeCode(100, "AcDbSymbolTableRecord");
+        writeCode(100, "AcDbLinetypeTableRecord");
         writeCode(2, name);
         writeCode(70, 0);
         writeCode(3, desc);
@@ -379,7 +428,9 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
         writeCode(73, 2);
         writeCode(40, total);
         writeCode(49, d);
+        writeCode(74, 0);
         writeCode(49, -s);
+        writeCode(74, 0);
     }
 
     // DASHDOT
@@ -391,9 +442,13 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
         writeCode(73, 4);
         writeCode(40, total);
         writeCode(49, d);
+        writeCode(74, 0);
         writeCode(49, -s);
+        writeCode(74, 0);
         writeCode(49, 0.0);
+        writeCode(74, 0);
         writeCode(49, -s);
+        writeCode(74, 0);
     }
 
     // DIVIDE
@@ -405,11 +460,17 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
         writeCode(73, 6);
         writeCode(40, total);
         writeCode(49, d);
+        writeCode(74, 0);
         writeCode(49, -s);
+        writeCode(74, 0);
         writeCode(49, 0.0);
+        writeCode(74, 0);
         writeCode(49, -s);
+        writeCode(74, 0);
         writeCode(49, 0.0);
+        writeCode(74, 0);
         writeCode(49, -s);
+        writeCode(74, 0);
     }
 
     writeCode(0, "ENDTAB");
@@ -417,20 +478,139 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
     // --- LAYER TABLE ---
     writeCode(0, "TABLE");
     writeCode(2, "LAYER");
+    writeCode(5, nextHandle());
+    writeCode(100, "AcDbSymbolTable");
     writeCode(70, layerNames.size());
     for (const QString& layerName : layerNames) {
         writeCode(0, "LAYER");
+        writeCode(5, nextHandle());
+        writeCode(100, "AcDbSymbolTableRecord");
+        writeCode(100, "AcDbLayerTableRecord");
         writeCode(2, layerName);
         writeCode(70, 0);
         writeCode(62, 7);
         writeCode(6, "CONTINUOUS");
+        writeCode(370, 25);
     }
     writeCode(0, "ENDTAB");
+
+    // --- STYLE TABLE ---
+    writeCode(0, "TABLE");
+    writeCode(2, "STYLE");
+    writeCode(5, nextHandle());
+    writeCode(100, "AcDbSymbolTable");
+    writeCode(70, 1);
+    {
+        writeCode(0, "STYLE");
+        writeCode(5, nextHandle());
+        writeCode(100, "AcDbSymbolTableRecord");
+        writeCode(100, "AcDbTextStyleTableRecord");
+        writeCode(2, "STANDARD");
+        writeCode(70, 0);
+        writeCode(40, 0.0);
+        writeCode(41, 1.0);
+        writeCode(50, 0.0);
+        writeCode(71, 0);
+        writeCode(42, 2.5);
+        writeCode(3, "txt");
+        writeCode(4, "");
+    }
+    writeCode(0, "ENDTAB");
+
+    // --- APPID TABLE ---
+    writeCode(0, "TABLE");
+    writeCode(2, "APPID");
+    writeCode(5, nextHandle());
+    writeCode(100, "AcDbSymbolTable");
+    writeCode(70, 1);
+    {
+        writeCode(0, "APPID");
+        writeCode(5, nextHandle());
+        writeCode(100, "AcDbSymbolTableRecord");
+        writeCode(100, "AcDbRegAppTableRecord");
+        writeCode(2, "ACAD");
+        writeCode(70, 0);
+    }
+    writeCode(0, "ENDTAB");
+
+    // --- DIMSTYLE TABLE ---
+    writeCode(0, "TABLE");
+    writeCode(2, "DIMSTYLE");
+    writeCode(5, nextHandle());
+    writeCode(100, "AcDbSymbolTable");
+    writeCode(70, 1);
+    writeCode(100, "AcDbDimStyleTable");
+    {
+        writeCode(0, "DIMSTYLE");
+        writeCode(5, nextHandle());
+        writeCode(100, "AcDbSymbolTableRecord");
+        writeCode(100, "AcDbDimStyleTableRecord");
+        writeCode(2, "STANDARD");
+        writeCode(70, 0);
+    }
+    writeCode(0, "ENDTAB");
+
+    // --- BLOCK_RECORD TABLE ---
+    writeCode(0, "TABLE");
+    writeCode(2, "BLOCK_RECORD");
+    writeCode(5, nextHandle());
+    writeCode(100, "AcDbSymbolTable");
+    writeCode(70, 2);
+
+    writeCode(0, "BLOCK_RECORD");
+    writeCode(5, nextHandle());
+    writeCode(100, "AcDbSymbolTableRecord");
+    writeCode(100, "AcDbBlockTableRecord");
+    writeCode(2, "*Model_Space");
+
+    writeCode(0, "BLOCK_RECORD");
+    writeCode(5, nextHandle());
+    writeCode(100, "AcDbSymbolTableRecord");
+    writeCode(100, "AcDbBlockTableRecord");
+    writeCode(2, "*Paper_Space");
+
+    writeCode(0, "ENDTAB");
+
     writeCode(0, "ENDSEC");
 
     // ================= BLOCKS SECTION =================
     writeCode(0, "SECTION");
     writeCode(2, "BLOCKS");
+
+    // *Model_Space
+    writeCode(0, "BLOCK");
+    writeCode(5, nextHandle());
+    writeCode(100, "AcDbEntity");
+    writeCode(8, "0");
+    writeCode(100, "AcDbBlockBegin");
+    writeCode(2, "*Model_Space");
+    writeCode(70, 0);
+    writeCode(10, 0.0); writeCode(20, 0.0); writeCode(30, 0.0);
+    writeCode(3, "*Model_Space");
+    writeCode(1, "");
+    writeCode(0, "ENDBLK");
+    writeCode(5, nextHandle());
+    writeCode(100, "AcDbEntity");
+    writeCode(8, "0");
+    writeCode(100, "AcDbBlockEnd");
+
+    // *Paper_Space
+    writeCode(0, "BLOCK");
+    writeCode(5, nextHandle());
+    writeCode(100, "AcDbEntity");
+    writeCode(8, "0");
+    writeCode(100, "AcDbBlockBegin");
+    writeCode(2, "*Paper_Space");
+    writeCode(70, 0);
+    writeCode(10, 0.0); writeCode(20, 0.0); writeCode(30, 0.0);
+    writeCode(3, "*Paper_Space");
+    writeCode(1, "");
+    writeCode(0, "ENDBLK");
+    writeCode(5, nextHandle());
+    writeCode(100, "AcDbEntity");
+    writeCode(8, "0");
+    writeCode(100, "AcDbBlockEnd");
+
     writeCode(0, "ENDSEC");
 
     // ================= ENTITIES SECTION =================
@@ -445,18 +625,21 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
         bool isWave = (st == LineStyleType::SolidWavy);
 
         // Лямбда для записи общих свойств сущности
-        auto writeCommonProperties = [&]() {
+        auto writeCommonProperties = [&](const QString& subclassMarker) {
+            writeCode(5, nextHandle());
+            writeCode(100, "AcDbEntity");
             writeCode(8, obj->getLayer());
             writeCode(6, getDxfLinetype(static_cast<int>(st)));
             writeCode(62, getAutoCadColorIndex(obj->getColor()));
             writeCode(420, getTrueColor24Bit(obj->getColor()));
             writeCode(370, getDxfLineWeight(obj));
+            writeCode(100, subclassMarker);
         };
 
         // Лямбда для записи xdata с нашим типом линии
         QString origTypeData; // Дополнительные xdata для оригинального типа
         auto writeXData = [&]() {
-            writeCode(999, QString("CLARUSCAD_LTYPE:%1").arg(static_cast<int>(st)));
+            writeCode(999, QString("UNIVERSITYCAD_LTYPE:%1").arg(static_cast<int>(st)));
             if (!origTypeData.isEmpty()) {
                 writeCode(999, origTypeData);
             }
@@ -465,7 +648,14 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
         // Лямбда для записи POLYLINE из набора точек
         auto writePolyline = [&](const std::vector<Point>& pts, bool closed) {
             writeCode(0, "POLYLINE");
-            writeCommonProperties();
+            writeCode(5, nextHandle());
+            writeCode(100, "AcDbEntity");
+            writeCode(8, obj->getLayer());
+            writeCode(6, getDxfLinetype(static_cast<int>(st)));
+            writeCode(62, getAutoCadColorIndex(obj->getColor()));
+            writeCode(420, getTrueColor24Bit(obj->getColor()));
+            writeCode(370, getDxfLineWeight(obj));
+            writeCode(100, "AcDb2dPolyline");
             writeCode(66, 1);
             writeCode(70, closed ? 1 : 0);
             writeCode(10, 0.0);
@@ -474,12 +664,18 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
             writeXData();
             for (const auto& pt : pts) {
                 writeCode(0, "VERTEX");
+                writeCode(5, nextHandle());
+                writeCode(100, "AcDbEntity");
                 writeCode(8, obj->getLayer());
+                writeCode(100, "AcDbVertex");
+                writeCode(100, "AcDb2dVertex");
                 writeCode(10, pt.getX());
                 writeCode(20, pt.getY());
                 writeCode(30, 0.0);
             }
             writeCode(0, "SEQEND");
+            writeCode(5, nextHandle());
+            writeCode(100, "AcDbEntity");
             writeCode(8, obj->getLayer());
         };
 
@@ -492,7 +688,7 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
                     writePolyline(pts, false);
                 } else {
                     writeCode(0, "LINE");
-                    writeCommonProperties();
+                    writeCommonProperties("AcDbLine");
                     writeCode(10, seg->getStart().getX());
                     writeCode(20, seg->getStart().getY());
                     writeCode(30, 0.0);
@@ -508,7 +704,7 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
                 if (isSpecial) {
                     auto pts = generateWaveEllipsePoints(circ->getCenter(), circ->getRadius(), circ->getRadius(), isWave);
                     // Устанавливаем xdata оригинального типа для round-trip
-                    origTypeData = QString("CLARUSCAD_ORIG:Circle|%1|%2|%3")
+                    origTypeData = QString("UNIVERSITYCAD_ORIG:Circle|%1|%2|%3")
                         .arg(circ->getCenter().getX())
                         .arg(circ->getCenter().getY())
                         .arg(circ->getRadius());
@@ -516,7 +712,7 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
                     origTypeData.clear();
                 } else {
                     writeCode(0, "CIRCLE");
-                    writeCommonProperties();
+                    writeCommonProperties("AcDbCircle");
                     writeCode(10, circ->getCenter().getX());
                     writeCode(20, circ->getCenter().getY());
                     writeCode(30, 0.0);
@@ -533,11 +729,12 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
                     writePolyline(pts, false);
                 } else {
                     writeCode(0, "ARC");
-                    writeCommonProperties();
+                    writeCommonProperties("AcDbCircle");
                     writeCode(10, arc->getCenter().getX());
                     writeCode(20, arc->getCenter().getY());
                     writeCode(30, 0.0);
                     writeCode(40, arc->getRadius());
+                    writeCode(100, "AcDbArc");
                     
                     // Углы внутри приложения хранятся в Y-up системе,
                     // но пользователь видит инвертированный Y на экране.
@@ -570,7 +767,7 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
                 if (isSpecial) {
                     auto pts = generateWaveEllipsePoints(ell->getCenter(), ell->getRadiusX(), ell->getRadiusY(), isWave);
                     // Устанавливаем xdata оригинального типа для round-trip
-                    origTypeData = QString("CLARUSCAD_ORIG:Ellipse|%1|%2|%3|%4")
+                    origTypeData = QString("UNIVERSITYCAD_ORIG:Ellipse|%1|%2|%3|%4")
                         .arg(ell->getCenter().getX())
                         .arg(ell->getCenter().getY())
                         .arg(ell->getRadiusX())
@@ -585,7 +782,7 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
                     double ratio = minorR / majorR;
 
                     writeCode(0, "ELLIPSE");
-                    writeCommonProperties();
+                    writeCommonProperties("AcDbEllipse");
                     writeCode(10, ell->getCenter().getX());
                     writeCode(20, ell->getCenter().getY());
                     writeCode(30, 0.0);
@@ -649,7 +846,7 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
             case PrimitiveType::Point: {
                 auto* pt = static_cast<PointObject*>(obj);
                 writeCode(0, "POINT");
-                writeCommonProperties();
+                writeCommonProperties("AcDbPoint");
                 writeCode(10, pt->getPosition().getX());
                 writeCode(20, pt->getPosition().getY());
                 writeCode(30, 0.0);
@@ -661,6 +858,15 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
         }
     }
 
+    writeCode(0, "ENDSEC");
+
+    // ================= OBJECTS SECTION =================
+    writeCode(0, "SECTION");
+    writeCode(2, "OBJECTS");
+    writeCode(0, "DICTIONARY");
+    writeCode(5, nextHandle());
+    writeCode(100, "AcDbDictionary");
+    writeCode(281, 1);
     writeCode(0, "ENDSEC");
 
     // ================= EOF =================
