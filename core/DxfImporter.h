@@ -63,6 +63,7 @@ public:
         double origCX = 0, origCY = 0; // Центр оригинального объекта
         double origR = 0;              // Радиус (для Circle)
         double origRX = 0, origRY = 0; // Радиусы (для Ellipse)
+        double origStartAngle = 0, origSpanAngle = 0; // Углы (для Arc)
     };
     
     // Извлечение общих свойств из набора пар

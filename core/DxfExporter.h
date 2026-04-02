@@ -9,7 +9,7 @@ class Scene;
 class Object;
 class QTextStream;
 
-// Модуль для экспорта сцены в формат DXF (AC1009 — R12 формат для совместимости с TFlex).
+// Модуль для экспорта сцены в формат DXF (AC1015)
 class DxfExporter {
 public:
     // Экспортирует все объекты сцены в указанный файл.

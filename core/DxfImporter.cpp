@@ -86,13 +86,12 @@ void DxfImporter::extractCommonProps(const std::vector<DxfPair>& pairs, DxfImpor
             // CONTINUOUS, BYLAYER, BYBLOCK — оставляем по умолчанию
         }
         else if (code == 999) {
-            if (val.startsWith("CLARUSCAD_LTYPE:")) {
+            if (val.startsWith("UNIVERSITYCAD_LTYPE:")) {
                 hasClarusData = true;
-                clarusLType = val.mid(16).toInt();
+                clarusLType = val.mid(val.indexOf(':') + 1).toInt();
             }
-            else if (val.startsWith("CLARUSCAD_ORIG:")) {
-                // Формат: CLARUSCAD_ORIG:Type|param1|param2|...
-                QString data = val.mid(15);
+            else if (val.startsWith("UNIVERSITYCAD_ORIG:")) {
+                QString data = val.mid(val.indexOf(':') + 1);
                 QStringList parts = data.split('|');
                 if (!parts.isEmpty()) {
                     props.origType = parts[0];
@@ -105,6 +104,12 @@ void DxfImporter::extractCommonProps(const std::vector<DxfPair>& pairs, DxfImpor
                         props.origCY = parts[2].toDouble();
                         props.origRX = parts[3].toDouble();
                         props.origRY = parts[4].toDouble();
+                    } else if (props.origType == "Arc" && parts.size() >= 6) {
+                        props.origCX = parts[1].toDouble();
+                        props.origCY = parts[2].toDouble();
+                        props.origR = parts[3].toDouble();
+                        props.origStartAngle = parts[4].toDouble();
+                        props.origSpanAngle = parts[5].toDouble();
                     }
                 }
             }
@@ -122,7 +127,7 @@ void DxfImporter::extractCommonProps(const std::vector<DxfPair>& pairs, DxfImpor
         }
     }
     
-    // CLARUSCAD_LTYPE имеет приоритет над DXF code 6
+    // UNIVERSITYCAD_LTYPE имеет приоритет над DXF code 6
     if (hasClarusData) {
         props.lineStyleType = clarusLType;
     }
@@ -195,21 +200,28 @@ bool DxfImporter::importScene(Scene* scene, const QString& filePath) {
                     fakeLwPoly.push_back({0, "LWPOLYLINE"});
                     fakeLwPoly.push_back({8, currentPolylineProps.layer});
                     if (currentPolylineProps.lineStyleType != -1)
-                        fakeLwPoly.push_back({999, "CLARUSCAD_LTYPE:" + QString::number(currentPolylineProps.lineStyleType)});
+                        fakeLwPoly.push_back({999, "UNIVERSITYCAD_LTYPE:" + QString::number(currentPolylineProps.lineStyleType)});
                     // Передаём xdata оригинального типа
                     if (!currentPolylineProps.origType.isEmpty()) {
                         QString origData;
                         if (currentPolylineProps.origType == "Circle") {
-                            origData = QString("CLARUSCAD_ORIG:Circle|%1|%2|%3")
+                            origData = QString("UNIVERSITYCAD_ORIG:Circle|%1|%2|%3")
                                 .arg(currentPolylineProps.origCX)
                                 .arg(currentPolylineProps.origCY)
                                 .arg(currentPolylineProps.origR);
                         } else if (currentPolylineProps.origType == "Ellipse") {
-                            origData = QString("CLARUSCAD_ORIG:Ellipse|%1|%2|%3|%4")
+                            origData = QString("UNIVERSITYCAD_ORIG:Ellipse|%1|%2|%3|%4")
                                 .arg(currentPolylineProps.origCX)
                                 .arg(currentPolylineProps.origCY)
                                 .arg(currentPolylineProps.origRX)
                                 .arg(currentPolylineProps.origRY);
+                        } else if (currentPolylineProps.origType == "Arc") {
+                            origData = QString("UNIVERSITYCAD_ORIG:Arc|%1|%2|%3|%4|%5")
+                                .arg(currentPolylineProps.origCX)
+                                .arg(currentPolylineProps.origCY)
+                                .arg(currentPolylineProps.origR)
+                                .arg(currentPolylineProps.origStartAngle)
+                                .arg(currentPolylineProps.origSpanAngle);
                         }
                         if (!origData.isEmpty())
                             fakeLwPoly.push_back({999, origData});
@@ -319,21 +331,22 @@ std::unique_ptr<Object> DxfImporter::createEntity(const EntityProps& props) {
     } else if (props.type == "CIRCLE") {
         obj = std::make_unique<Circle>(Point(props.pt10_x, props.pt10_y), props.pt40);
     } else if (props.type == "ARC") {
-        // DXF углы → внутренние углы: обратное отражение по X-оси
-        // (экспорт делает dxfAngle = -internalAngle, импорт восстанавливает)
-        double dxfStart = props.pt50;
-        double dxfEnd = props.pt51;
-        
-        // Обратное отражение: internalAngle = -dxfAngle
-        double internalStart = -dxfEnd;   // DXF end → internal start (из-за swap в экспорте)
-        double internalEnd = -dxfStart;   // DXF start → internal end
-        
-        double span = internalEnd - internalStart;
-        // Нормализуем span
-        if (span < 0) span += 360.0;
-        if (span > 360.0) span -= 360.0;
-        
-        obj = std::make_unique<Arc>(Point(props.pt10_x, props.pt10_y), props.pt40, internalStart, span);
+        if (!props.origType.isEmpty() && props.origType == "Arc" && props.origR > 0) {
+            obj = std::make_unique<Arc>(Point(props.origCX, props.origCY), props.origR, props.origStartAngle, props.origSpanAngle);
+        } else {
+            // Стандартный импорт
+            double dxfStart = props.pt50;
+            double dxfEnd = props.pt51;
+            
+            double dxfSpan = dxfEnd - dxfStart;
+            if (dxfSpan <= 0) dxfSpan += 360.0;
+            
+            double qt_start = std::fmod(360.0 - dxfEnd, 360.0);
+            if (qt_start < 0) qt_start += 360.0;
+            double qt_span = dxfSpan;
+            
+            obj = std::make_unique<Arc>(Point(props.pt10_x, props.pt10_y), props.pt40, qt_start, qt_span);
+        }
     } else if (props.type == "ELLIPSE") {
         double majorLen = std::sqrt(props.pt11_x * props.pt11_x + props.pt11_y * props.pt11_y);
         double minorLen = majorLen * props.pt40;
@@ -354,6 +367,8 @@ std::unique_ptr<Object> DxfImporter::createEntity(const EntityProps& props) {
                 obj = std::make_unique<Circle>(Point(props.origCX, props.origCY), props.origR);
             } else if (props.origType == "Ellipse" && props.origRX > 0 && props.origRY > 0) {
                 obj = std::make_unique<Ellipse>(Point(props.origCX, props.origCY), props.origRX, props.origRY);
+            } else if (props.origType == "Arc" && props.origR > 0) {
+                obj = std::make_unique<Arc>(Point(props.origCX, props.origCY), props.origR, props.origStartAngle, props.origSpanAngle);
             }
         }
         

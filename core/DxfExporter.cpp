@@ -723,10 +723,18 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
             }
             case PrimitiveType::Arc: {
                 auto* arc = static_cast<Arc*>(obj);
+                origTypeData = QString("UNIVERSITYCAD_ORIG:Arc|%1|%2|%3|%4|%5")
+                    .arg(arc->getCenter().getX())
+                    .arg(arc->getCenter().getY())
+                    .arg(arc->getRadius())
+                    .arg(arc->getStartAngle())
+                    .arg(arc->getSpanAngle());
+
                 if (isSpecial) {
                     auto pts = generateWaveArcPoints(arc->getCenter(), arc->getRadius(),
                                                      arc->getStartAngle(), arc->getSpanAngle(), isWave);
                     writePolyline(pts, false);
+                    origTypeData.clear();
                 } else {
                     writeCode(0, "ARC");
                     writeCommonProperties("AcDbCircle");
@@ -756,9 +764,16 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
                     // DXF ARC рисуется CCW от code 50 к code 51.
                     // При отражении направление обхода инвертируется,
                     // поэтому start и end меняются местами.
-                    writeCode(50, dxfEnd);
-                    writeCode(51, dxfStart);
+                    double span = arc->getSpanAngle();
+                    if (span >= 0) {
+                        writeCode(50, dxfEnd);
+                        writeCode(51, dxfStart);
+                    } else {
+                        writeCode(50, dxfStart);
+                        writeCode(51, dxfEnd);
+                    }
                     writeXData();
+                    origTypeData.clear();
                 }
                 break;
             }
