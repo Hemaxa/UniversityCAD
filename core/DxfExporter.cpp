@@ -342,7 +342,7 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
     writeCode(0, "SECTION");
     writeCode(2, "HEADER");
     writeCode(9, "$ACADVER");
-    writeCode(1, "AC1009");
+    writeCode(1, "AC1015");
     writeCode(9, "$HANDLING");
     writeCode(70, 0);
     writeCode(9, "$LTSCALE");
@@ -454,8 +454,12 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
         };
 
         // Лямбда для записи xdata с нашим типом линии
+        QString origTypeData; // Дополнительные xdata для оригинального типа
         auto writeXData = [&]() {
             writeCode(999, QString("CLARUSCAD_LTYPE:%1").arg(static_cast<int>(st)));
+            if (!origTypeData.isEmpty()) {
+                writeCode(999, origTypeData);
+            }
         };
 
         // Лямбда для записи POLYLINE из набора точек
@@ -503,7 +507,13 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
                 auto* circ = static_cast<Circle*>(obj);
                 if (isSpecial) {
                     auto pts = generateWaveEllipsePoints(circ->getCenter(), circ->getRadius(), circ->getRadius(), isWave);
+                    // Устанавливаем xdata оригинального типа для round-trip
+                    origTypeData = QString("CLARUSCAD_ORIG:Circle|%1|%2|%3")
+                        .arg(circ->getCenter().getX())
+                        .arg(circ->getCenter().getY())
+                        .arg(circ->getRadius());
                     writePolyline(pts, true);
+                    origTypeData.clear();
                 } else {
                     writeCode(0, "CIRCLE");
                     writeCommonProperties();
@@ -528,9 +538,29 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
                     writeCode(20, arc->getCenter().getY());
                     writeCode(30, 0.0);
                     writeCode(40, arc->getRadius());
-                    writeCode(50, arc->getStartAngle());
-                    double endAngle = arc->getStartAngle() + arc->getSpanAngle();
-                    writeCode(51, endAngle);
+                    
+                    // Углы внутри приложения хранятся в Y-up системе,
+                    // но пользователь видит инвертированный Y на экране.
+                    // DXF использует Y-up, но углы должны соответствовать визуальному
+                    // отображению, поэтому отражаем по оси X: dxfAngle = -internalAngle
+                    auto normAngle = [](double a) -> double {
+                        a = std::fmod(a, 360.0);
+                        if (a < 0) a += 360.0;
+                        return a;
+                    };
+                    
+                    double internalStart = arc->getStartAngle();
+                    double internalEnd = internalStart + arc->getSpanAngle();
+                    
+                    // Отражение по X-оси
+                    double dxfStart = normAngle(-internalStart);
+                    double dxfEnd = normAngle(-internalEnd);
+                    
+                    // DXF ARC рисуется CCW от code 50 к code 51.
+                    // При отражении направление обхода инвертируется,
+                    // поэтому start и end меняются местами.
+                    writeCode(50, dxfEnd);
+                    writeCode(51, dxfStart);
                     writeXData();
                 }
                 break;
@@ -539,17 +569,38 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
                 auto* ell = static_cast<Ellipse*>(obj);
                 if (isSpecial) {
                     auto pts = generateWaveEllipsePoints(ell->getCenter(), ell->getRadiusX(), ell->getRadiusY(), isWave);
+                    // Устанавливаем xdata оригинального типа для round-trip
+                    origTypeData = QString("CLARUSCAD_ORIG:Ellipse|%1|%2|%3|%4")
+                        .arg(ell->getCenter().getX())
+                        .arg(ell->getCenter().getY())
+                        .arg(ell->getRadiusX())
+                        .arg(ell->getRadiusY());
                     writePolyline(pts, true);
+                    origTypeData.clear();
                 } else {
-                    // Экспортируем как POLYLINE (эллипс не поддерживается в AC1009 R12)
-                    std::vector<Point> pts;
-                    int steps = 128;
-                    for (int i = 0; i < steps; ++i) {
-                        double angle = (double)i / steps * 2.0 * M_PI;
-                        pts.emplace_back(ell->getCenter().getX() + ell->getRadiusX() * std::cos(angle),
-                                         ell->getCenter().getY() + ell->getRadiusY() * std::sin(angle));
+                    double rX = ell->getRadiusX();
+                    double rY = ell->getRadiusY();
+                    double majorR = std::max(rX, rY);
+                    double minorR = std::min(rX, rY);
+                    double ratio = minorR / majorR;
+
+                    writeCode(0, "ELLIPSE");
+                    writeCommonProperties();
+                    writeCode(10, ell->getCenter().getX());
+                    writeCode(20, ell->getCenter().getY());
+                    writeCode(30, 0.0);
+                    if (rX >= rY) {
+                        writeCode(11, rX);
+                        writeCode(21, 0.0);
+                    } else {
+                        writeCode(11, 0.0);
+                        writeCode(21, rY);
                     }
-                    writePolyline(pts, true);
+                    writeCode(31, 0.0);
+                    writeCode(40, ratio);
+                    writeCode(41, 0.0);
+                    writeCode(42, 2.0 * M_PI);
+                    writeXData();
                 }
                 break;
             }
@@ -584,12 +635,14 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
             }
             case PrimitiveType::Spline: {
                 auto* spl = static_cast<Spline*>(obj);
-                const auto& splPoints = spl->getPoints();
                 if (isSpecial) {
+                    const auto& splPoints = spl->getSmoothPoints();
                     auto pts = stylizeEdges(splPoints, obj, false);
                     writePolyline(pts, false);
                 } else {
-                    writePolyline(splPoints, false);
+                    // Экспорт как POLYLINE с высоким разрешением для гладкости
+                    auto smoothPts = spl->getSmoothPoints(200);
+                    writePolyline(smoothPts, false);
                 }
                 break;
             }

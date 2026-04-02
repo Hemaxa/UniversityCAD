@@ -745,33 +745,173 @@ void SplineDraw::draw(QPainter& painter, Object* primitive, bool isSelected) con
 
     setupPen(painter, obj, isSelected);
 
-    QPainterPath path;
-    path.moveTo(points[0].getX(), points[0].getY());
+    auto smoothPoints = obj->getSmoothPoints();
+    if (smoothPoints.empty()) return;
     
-    // Smooth spline using cubic beziers (Catmull-Rom spline conversion)
-    if (points.size() >= 2) {
-        for (size_t i = 0; i < points.size() - 1; ++i) {
-            Point p0 = (i == 0) ? points[0] : points[i-1];
-            Point p1 = points[i];
-            Point p2 = points[i+1];
-            Point p3 = (i + 2 < points.size()) ? points[i+2] : p2;
-
-            double cp1x = p1.getX() + (p2.getX() - p0.getX()) / 6.0;
-            double cp1y = p1.getY() + (p2.getY() - p0.getY()) / 6.0;
-
-            double cp2x = p2.getX() - (p3.getX() - p1.getX()) / 6.0;
-            double cp2y = p2.getY() - (p3.getY() - p1.getY()) / 6.0;
-
-            path.cubicTo(cp1x, cp1y, cp2x, cp2y, p2.getX(), p2.getY());
-        }
-    }
-    
-    // Apply style to Spline
     LineStyleType type = obj->getLineStyle().type;
-    if (type == LineStyleType::SolidWavy || type == LineStyleType::SolidZigZag) {
-         drawStyledPath(painter, path, obj);
+    
+    if (type == LineStyleType::SolidWavy) {
+        // Волнистая линия вдоль всего сплайна
+        const auto& wavy = GlobalSettings::instance().wavyParams;
+        double amplitude = wavy.amplitude;
+        double period = wavy.period;
+        
+        // Используем высокое разрешение для гладкости
+        auto hiRes = obj->getSmoothPoints(100);
+        if (hiRes.size() < 2) return;
+        
+        // Вычисляем кумулятивные длины дуги
+        std::vector<double> arcLengths(hiRes.size(), 0.0);
+        for (size_t i = 1; i < hiRes.size(); ++i) {
+            double dx = hiRes[i].getX() - hiRes[i-1].getX();
+            double dy = hiRes[i].getY() - hiRes[i-1].getY();
+            arcLengths[i] = arcLengths[i-1] + std::sqrt(dx*dx + dy*dy);
+        }
+        double totalLen = arcLengths.back();
+        if (totalLen < 1e-9) return;
+        
+        // Ресемплируем: ~10 точек на период волны, минимум 200 точек
+        int numSamples = std::max(200, (int)(totalLen / period * 10));
+        double step = totalLen / numSamples;
+        
+        // Хелпер: интерполяция позиции и касательной по длине дуги
+        auto sampleAt = [&](double s) -> std::tuple<double, double, double, double> {
+            // Бинарный поиск
+            size_t lo = 0, hi = arcLengths.size() - 1;
+            while (lo + 1 < hi) {
+                size_t mid = (lo + hi) / 2;
+                if (arcLengths[mid] <= s) lo = mid;
+                else hi = mid;
+            }
+            double segLen = arcLengths[hi] - arcLengths[lo];
+            double t = (segLen > 1e-9) ? (s - arcLengths[lo]) / segLen : 0.0;
+            double bx = hiRes[lo].getX() + t * (hiRes[hi].getX() - hiRes[lo].getX());
+            double by = hiRes[lo].getY() + t * (hiRes[hi].getY() - hiRes[lo].getY());
+            // Касательная (усредненная)
+            double tx = hiRes[hi].getX() - hiRes[lo].getX();
+            double ty = hiRes[hi].getY() - hiRes[lo].getY();
+            double tl = std::sqrt(tx*tx + ty*ty);
+            if (tl < 1e-9) tl = 1.0;
+            double nx = -ty / tl;
+            double ny =  tx / tl;
+            return {bx, by, nx, ny};
+        };
+        
+        QPainterPath path;
+        for (int i = 0; i <= numSamples; ++i) {
+            double s = i * step;
+            auto [bx, by, nx, ny] = sampleAt(s);
+            double offset = amplitude * std::sin(s * 2.0 * M_PI / period);
+            double px = bx + offset * nx;
+            double py = by + offset * ny;
+            if (i == 0) path.moveTo(px, py);
+            else path.lineTo(px, py);
+        }
+        painter.drawPath(path);
+        
+    } else if (type == LineStyleType::SolidZigZag) {
+        // Зигзаг вдоль всего сплайна
+        const auto& zigzag = GlobalSettings::instance().zigzagParams;
+        double amplitude = zigzag.amplitude;
+        double straightLen = zigzag.straightLength;
+        double breakLen = zigzag.breakLength;
+        
+        // Используем высокое разрешение для гладкости
+        auto hiRes = obj->getSmoothPoints(100);
+        if (hiRes.size() < 2) return;
+        
+        // Вычисляем кумулятивные длины дуги
+        std::vector<double> arcLengths(hiRes.size(), 0.0);
+        for (size_t i = 1; i < hiRes.size(); ++i) {
+            double dx = hiRes[i].getX() - hiRes[i-1].getX();
+            double dy = hiRes[i].getY() - hiRes[i-1].getY();
+            arcLengths[i] = arcLengths[i-1] + std::sqrt(dx*dx + dy*dy);
+        }
+        double totalLen = arcLengths.back();
+        
+        // Хелпер: найти точку и нормаль по длине дуги
+        auto getPointAndNormal = [&](double s) -> std::tuple<double, double, double, double> {
+            size_t lo = 0, hi = arcLengths.size() - 1;
+            while (lo + 1 < hi) {
+                size_t mid = (lo + hi) / 2;
+                if (arcLengths[mid] <= s) lo = mid;
+                else hi = mid;
+            }
+            double segLen = arcLengths[hi] - arcLengths[lo];
+            double t = (segLen > 1e-9) ? (s - arcLengths[lo]) / segLen : 0.0;
+            double bx = hiRes[lo].getX() + t * (hiRes[hi].getX() - hiRes[lo].getX());
+            double by = hiRes[lo].getY() + t * (hiRes[hi].getY() - hiRes[lo].getY());
+            double tx = hiRes[hi].getX() - hiRes[lo].getX();
+            double ty = hiRes[hi].getY() - hiRes[lo].getY();
+            double tl = std::sqrt(tx*tx + ty*ty);
+            if (tl < 1e-9) tl = 1.0;
+            double nx = -ty / tl;
+            double ny =  tx / tl;
+            return {bx, by, nx, ny};
+        };
+        
+        QPainterPath path;
+        double patternLen = straightLen + 2.0 * breakLen;
+        double currentS = 0.0;
+        int direction = 1;
+        bool first = true;
+        
+        while (currentS < totalLen) {
+            auto [bx, by, nx, ny] = getPointAndNormal(std::min(currentS, totalLen));
+            if (first) { path.moveTo(bx, by); first = false; }
+            
+            // Прямой участок
+            double nextS = currentS + straightLen;
+            if (nextS >= totalLen) {
+                auto [ex, ey, enx, eny] = getPointAndNormal(totalLen);
+                path.lineTo(ex, ey); break;
+            }
+            auto [sx, sy, snx, sny] = getPointAndNormal(nextS);
+            path.lineTo(sx, sy);
+            currentS = nextS;
+            
+            // Излом вниз
+            nextS = currentS + breakLen / 2.0;
+            if (nextS >= totalLen) {
+                auto [ex, ey, enx, eny] = getPointAndNormal(totalLen);
+                path.lineTo(ex, ey); break;
+            }
+            auto [d1x, d1y, d1nx, d1ny] = getPointAndNormal(nextS);
+            path.lineTo(d1x - direction * amplitude * d1nx, d1y - direction * amplitude * d1ny);
+            currentS = nextS;
+            
+            // Проход через линию вверх
+            nextS = currentS + breakLen;
+            if (nextS >= totalLen) {
+                auto [ex, ey, enx, eny] = getPointAndNormal(totalLen);
+                path.lineTo(ex, ey); break;
+            }
+            auto [u1x, u1y, u1nx, u1ny] = getPointAndNormal(nextS);
+            path.lineTo(u1x + direction * amplitude * u1nx, u1y + direction * amplitude * u1ny);
+            currentS = nextS;
+            
+            // Возврат на линию
+            nextS = currentS + breakLen / 2.0;
+            if (nextS >= totalLen) {
+                auto [ex, ey, enx, eny] = getPointAndNormal(totalLen);
+                path.lineTo(ex, ey); break;
+            }
+            auto [rx, ry, rnx, rny] = getPointAndNormal(nextS);
+            path.lineTo(rx, ry);
+            currentS = nextS;
+            
+            direction = -direction;
+        }
+        painter.drawPath(path);
+        
     } else {
-         painter.drawPath(path);
+        // Для всех остальных типов — стандартный сглаженный путь
+        QPainterPath path;
+        path.moveTo(smoothPoints[0].getX(), smoothPoints[0].getY());
+        for (size_t i = 1; i < smoothPoints.size(); ++i) {
+            path.lineTo(smoothPoints[i].getX(), smoothPoints[i].getY());
+        }
+        painter.drawPath(path);
     }
 
     // Рисуем опорные точки, если объект выделен

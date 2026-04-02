@@ -20,6 +20,9 @@ public:
     // Добавляет контрольную точку в конец.
     void addPoint(const Point& p);
 
+    // Вычисляет сглаженные точки для отрисовки и DXF экспорта.
+    std::vector<Point> getSmoothPoints(int resolution = 20) const;
+
     // Возвращает точки привязки (контрольные точки и середины).
     std::vector<SnapPoint> getSnapPoints() const override;
     // Возвращает ближайшую точку на сплайне к заданной точке p.

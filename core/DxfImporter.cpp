@@ -90,6 +90,24 @@ void DxfImporter::extractCommonProps(const std::vector<DxfPair>& pairs, DxfImpor
                 hasClarusData = true;
                 clarusLType = val.mid(16).toInt();
             }
+            else if (val.startsWith("CLARUSCAD_ORIG:")) {
+                // Формат: CLARUSCAD_ORIG:Type|param1|param2|...
+                QString data = val.mid(15);
+                QStringList parts = data.split('|');
+                if (!parts.isEmpty()) {
+                    props.origType = parts[0];
+                    if (props.origType == "Circle" && parts.size() >= 4) {
+                        props.origCX = parts[1].toDouble();
+                        props.origCY = parts[2].toDouble();
+                        props.origR = parts[3].toDouble();
+                    } else if (props.origType == "Ellipse" && parts.size() >= 5) {
+                        props.origCX = parts[1].toDouble();
+                        props.origCY = parts[2].toDouble();
+                        props.origRX = parts[3].toDouble();
+                        props.origRY = parts[4].toDouble();
+                    }
+                }
+            }
         }
         else if (code == 10) props.pt10_x = val.toDouble();
         else if (code == 20) props.pt10_y = val.toDouble();
@@ -117,6 +135,20 @@ void DxfImporter::extractCommonProps(const std::vector<DxfPair>& pairs, DxfImpor
             if (p.code == 10) { curX = p.value.toDouble(); hasX = true; }
             else if (p.code == 20 && hasX) { 
                 curY = p.value.toDouble(); 
+                props.vertices.emplace_back(curX, curY);
+                hasX = false;
+            }
+        }
+    }
+    
+    // Сбор контрольных точек для DXF SPLINE
+    if (props.type == "SPLINE") {
+        double curX = 0, curY = 0;
+        bool hasX = false;
+        for (const auto& p : pairs) {
+            if (p.code == 10) { curX = p.value.toDouble(); hasX = true; }
+            else if (p.code == 20 && hasX) {
+                curY = p.value.toDouble();
                 props.vertices.emplace_back(curX, curY);
                 hasX = false;
             }
@@ -164,6 +196,24 @@ bool DxfImporter::importScene(Scene* scene, const QString& filePath) {
                     fakeLwPoly.push_back({8, currentPolylineProps.layer});
                     if (currentPolylineProps.lineStyleType != -1)
                         fakeLwPoly.push_back({999, "CLARUSCAD_LTYPE:" + QString::number(currentPolylineProps.lineStyleType)});
+                    // Передаём xdata оригинального типа
+                    if (!currentPolylineProps.origType.isEmpty()) {
+                        QString origData;
+                        if (currentPolylineProps.origType == "Circle") {
+                            origData = QString("CLARUSCAD_ORIG:Circle|%1|%2|%3")
+                                .arg(currentPolylineProps.origCX)
+                                .arg(currentPolylineProps.origCY)
+                                .arg(currentPolylineProps.origR);
+                        } else if (currentPolylineProps.origType == "Ellipse") {
+                            origData = QString("CLARUSCAD_ORIG:Ellipse|%1|%2|%3|%4")
+                                .arg(currentPolylineProps.origCX)
+                                .arg(currentPolylineProps.origCY)
+                                .arg(currentPolylineProps.origRX)
+                                .arg(currentPolylineProps.origRY);
+                        }
+                        if (!origData.isEmpty())
+                            fakeLwPoly.push_back({999, origData});
+                    }
                     fakeLwPoly.push_back({70, currentPolylineProps.isClosedX ? "1" : "0"});
                     for (const auto& v : currentPolylineProps.vertices) {
                         fakeLwPoly.push_back({10, QString::number(v.getX())});
@@ -269,37 +319,141 @@ std::unique_ptr<Object> DxfImporter::createEntity(const EntityProps& props) {
     } else if (props.type == "CIRCLE") {
         obj = std::make_unique<Circle>(Point(props.pt10_x, props.pt10_y), props.pt40);
     } else if (props.type == "ARC") {
-        double span = props.pt51 - props.pt50;
+        // DXF углы → внутренние углы: обратное отражение по X-оси
+        // (экспорт делает dxfAngle = -internalAngle, импорт восстанавливает)
+        double dxfStart = props.pt50;
+        double dxfEnd = props.pt51;
+        
+        // Обратное отражение: internalAngle = -dxfAngle
+        double internalStart = -dxfEnd;   // DXF end → internal start (из-за swap в экспорте)
+        double internalEnd = -dxfStart;   // DXF start → internal end
+        
+        double span = internalEnd - internalStart;
+        // Нормализуем span
         if (span < 0) span += 360.0;
-        obj = std::make_unique<Arc>(Point(props.pt10_x, props.pt10_y), props.pt40, props.pt50, span);
+        if (span > 360.0) span -= 360.0;
+        
+        obj = std::make_unique<Arc>(Point(props.pt10_x, props.pt10_y), props.pt40, internalStart, span);
     } else if (props.type == "ELLIPSE") {
         double majorLen = std::sqrt(props.pt11_x * props.pt11_x + props.pt11_y * props.pt11_y);
-        obj = std::make_unique<Ellipse>(Point(props.pt10_x, props.pt10_y), majorLen, majorLen * props.pt40);
+        double minorLen = majorLen * props.pt40;
+        
+        // В DXF pt11 указывает направление большой полуоси.
+        // Если вектор больше вытянут по Y, значит это вертикальный эллипс.
+        if (std::abs(props.pt11_x) >= std::abs(props.pt11_y)) {
+            obj = std::make_unique<Ellipse>(Point(props.pt10_x, props.pt10_y), majorLen, minorLen);
+        } else {
+            obj = std::make_unique<Ellipse>(Point(props.pt10_x, props.pt10_y), minorLen, majorLen);
+        }
     } else if (props.type == "POLYLINE" || props.type == "LWPOLYLINE") {
         if (props.vertices.size() < 2) return nullptr;
         
-        if (props.vertices.size() == 2) {
-            obj = std::make_unique<Segment>(props.vertices[0], props.vertices[1]);
-        } else if (props.vertices.size() >= 4 && props.isClosedX) {
-            if (props.vertices.size() == 4) {
-                double minX = props.vertices[0].getX(), maxX = props.vertices[0].getX();
-                double minY = props.vertices[0].getY(), maxY = props.vertices[0].getY();
-                for (const auto& p : props.vertices) {
-                    minX = std::min(minX, p.getX()); maxX = std::max(maxX, p.getX());
-                    minY = std::min(minY, p.getY()); maxY = std::max(maxY, p.getY());
-                }
-                obj = std::make_unique<Rectangle>(Point(minX, maxY), maxX - minX, maxY - minY);
-            } else {
-                double sumX = 0, sumY = 0;
-                for (const auto& p : props.vertices) { sumX += p.getX(); sumY += p.getY(); }
-                Point center(sumX / props.vertices.size(), sumY / props.vertices.size());
-                double dx = props.vertices[0].getX() - center.getX();
-                double dy = props.vertices[0].getY() - center.getY();
-                double radius = std::sqrt(dx*dx + dy*dy);
-                obj = std::make_unique<PolygonObj>(center, radius, (int)props.vertices.size(), true);
+        // 1. Проверяем xdata оригинального типа (round-trip из нашего экспортёра)
+        if (!props.origType.isEmpty()) {
+            if (props.origType == "Circle" && props.origR > 0) {
+                obj = std::make_unique<Circle>(Point(props.origCX, props.origCY), props.origR);
+            } else if (props.origType == "Ellipse" && props.origRX > 0 && props.origRY > 0) {
+                obj = std::make_unique<Ellipse>(Point(props.origCX, props.origCY), props.origRX, props.origRY);
             }
-        } else {
-            obj = std::make_unique<Spline>(props.vertices);
+        }
+        
+        // 2. Если xdata не помогла, используем геометрический анализ
+        if (!obj) {
+            if (props.vertices.size() == 2) {
+                obj = std::make_unique<Segment>(props.vertices[0], props.vertices[1]);
+            } else if (props.vertices.size() >= 4 && props.isClosedX) {
+                // Попытка определить прямоугольник (4 вершины, прямые углы)
+                if (props.vertices.size() == 4) {
+                    double minX = props.vertices[0].getX(), maxX = props.vertices[0].getX();
+                    double minY = props.vertices[0].getY(), maxY = props.vertices[0].getY();
+                    for (const auto& p : props.vertices) {
+                        minX = std::min(minX, p.getX()); maxX = std::max(maxX, p.getX());
+                        minY = std::min(minY, p.getY()); maxY = std::max(maxY, p.getY());
+                    }
+                    obj = std::make_unique<Rectangle>(Point(minX, maxY), maxX - minX, maxY - minY);
+                } else {
+                    // Эвристика: проверяем, является ли замкнутая полилиния окружностью или эллипсом
+                    // Вычисляем центр масс
+                    double sumX = 0, sumY = 0;
+                    for (const auto& p : props.vertices) { sumX += p.getX(); sumY += p.getY(); }
+                    Point center(sumX / props.vertices.size(), sumY / props.vertices.size());
+                    
+                    // Проверяем, лежат ли все точки на одной окружности
+                    double dx0 = props.vertices[0].getX() - center.getX();
+                    double dy0 = props.vertices[0].getY() - center.getY();
+                    double r0 = std::sqrt(dx0*dx0 + dy0*dy0);
+                    
+                    if (r0 > 1e-6 && props.vertices.size() >= 8) {
+                        // Проверка на окружность: все расстояния от центра одинаковы
+                        bool isCircle = true;
+                        double maxDeviation = 0;
+                        for (const auto& p : props.vertices) {
+                            double dx = p.getX() - center.getX();
+                            double dy = p.getY() - center.getY();
+                            double r = std::sqrt(dx*dx + dy*dy);
+                            double dev = std::abs(r - r0) / r0;
+                            maxDeviation = std::max(maxDeviation, dev);
+                        }
+                        
+                        if (maxDeviation < 0.02) { // 2% допуск
+                            obj = std::make_unique<Circle>(center, r0);
+                        } else {
+                            // Проверка на эллипс: вычисляем min/max расстояния по осям
+                            double maxDX = 0, maxDY = 0;
+                            for (const auto& p : props.vertices) {
+                                maxDX = std::max(maxDX, std::abs(p.getX() - center.getX()));
+                                maxDY = std::max(maxDY, std::abs(p.getY() - center.getY()));
+                            }
+                            
+                            if (maxDX > 1e-6 && maxDY > 1e-6) {
+                                // Проверяем, лежат ли точки на эллипсе (x/rx)^2 + (y/ry)^2 ≈ 1
+                                bool isEllipse = true;
+                                double maxEllDev = 0;
+                                for (const auto& p : props.vertices) {
+                                    double nx = (p.getX() - center.getX()) / maxDX;
+                                    double ny = (p.getY() - center.getY()) / maxDY;
+                                    double dev = std::abs(nx*nx + ny*ny - 1.0);
+                                    maxEllDev = std::max(maxEllDev, dev);
+                                }
+                                
+                                if (maxEllDev < 0.05) { // 5% допуск для эллипса
+                                    obj = std::make_unique<Ellipse>(center, maxDX, maxDY);
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Если не окружность и не эллипс — полигон
+                    if (!obj) {
+                        double radius = r0;
+                        obj = std::make_unique<PolygonObj>(center, radius, (int)props.vertices.size(), true);
+                    }
+                }
+            } else {
+                obj = std::make_unique<Spline>(props.vertices);
+            }
+        }
+    } else if (props.type == "SPLINE") {
+        // DXF SPLINE → Spline объект
+        // Используем контрольные точки как опорные точки сплайна.
+        // Для составного Bezier (4 точки на сегмент) извлекаем точки на кривой:
+        // P0, (skip CP1, CP2), P1, (skip CP1, CP2), P2, ...
+        if (props.vertices.size() >= 2) {
+            // Проверяем, является ли это составной Bezier кривой (наш экспорт)
+            // Количество CP = 3*k + 1 для k сегментов
+            int numCPs = (int)props.vertices.size();
+            if (numCPs >= 4 && (numCPs - 1) % 3 == 0) {
+                // Это составной Bezier — извлекаем точки на кривой
+                std::vector<Point> onCurvePoints;
+                onCurvePoints.push_back(props.vertices[0]);
+                for (int i = 3; i < numCPs; i += 3) {
+                    onCurvePoints.push_back(props.vertices[i]);
+                }
+                obj = std::make_unique<Spline>(onCurvePoints);
+            } else {
+                // Общий случай — используем все точки
+                obj = std::make_unique<Spline>(props.vertices);
+            }
         }
     } else if (props.type == "POINT") {
         obj = std::make_unique<PointObject>(Point(props.pt10_x, props.pt10_y));

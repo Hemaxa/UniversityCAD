@@ -57,6 +57,12 @@ public:
         
         // Для INSERT
         QString blockName;
+        
+        // XData: оригинальный тип объекта (для round-trip wavy/zigzag)
+        QString origType; // "Circle", "Ellipse", etc.
+        double origCX = 0, origCY = 0; // Центр оригинального объекта
+        double origR = 0;              // Радиус (для Circle)
+        double origRX = 0, origRY = 0; // Радиусы (для Ellipse)
     };
     
     // Извлечение общих свойств из набора пар
