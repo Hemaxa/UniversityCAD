@@ -52,6 +52,7 @@ private slots:
     void onImportDxf();
     // Обработчик экспорта DXF.
     void onExportDxf();
+    void onApplyDimensionGlobalStyle();
 
 signals:
     // Сигнал об изменении сцены.

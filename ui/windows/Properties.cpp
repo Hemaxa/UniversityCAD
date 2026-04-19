@@ -8,6 +8,7 @@
 #include "Polygon.h"
 #include "Spline.h"
 #include "PointObject.h"
+#include "Dimension.h"
 #include "StyleDialog.h"
 #include "LineSettingsMenu.h"
 #include "MathUtils.h"
@@ -25,6 +26,8 @@
 #include <QMenu>
 #include <QStyle>
 #include <QScrollArea>
+#include <QLineEdit>
+#include <QIcon>
 #include <cmath>
 #include <QtMath>
 
@@ -35,6 +38,7 @@ static QDoubleSpinBox* createSpin(double val = 0, double min = -100000, double m
     s->setRange(min, max);
     s->setValue(val);
     s->setDecimals(2);
+    s->setMinimumWidth(48);
     s->setFocusPolicy(Qt::ClickFocus);
     return s;
 }
@@ -43,6 +47,16 @@ static QLabel* createLbl(const QString& text) {
     auto* l = new QLabel(text);
     l->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     return l;
+}
+
+static bool canConvertDimensionType(DimensionType from, DimensionType to) {
+    auto isLinear = [](DimensionType t) {
+        return t == DimensionType::Linear || t == DimensionType::Horizontal || t == DimensionType::Vertical;
+    };
+    auto isRadial = [](DimensionType t) {
+        return t == DimensionType::Radius || t == DimensionType::Diameter;
+    };
+    return from == to || (isLinear(from) && isLinear(to)) || (isRadial(from) && isRadial(to));
 }
 
 Properties::Properties(QWidget *parent) : QWidget(parent), m_isCreationMode(true) {
@@ -72,6 +86,7 @@ Properties::Properties(QWidget *parent) : QWidget(parent), m_isCreationMode(true
     m_primitiveWidgets[PrimitiveType::Polygon] = createPolygonWidget();
     m_primitiveWidgets[PrimitiveType::Spline] = createSplineWidget();
     m_primitiveWidgets[PrimitiveType::Point] = createPointWidget();
+    m_primitiveWidgets[PrimitiveType::Dimension] = createDimensionWidget();
 
     for (auto& pair : m_primitiveWidgets) {
         m_stack->addWidget(pair.second);
@@ -117,7 +132,8 @@ Properties::Properties(QWidget *parent) : QWidget(parent), m_isCreationMode(true
 QGridLayout* Properties::setupGridLayout(QGroupBox* group) {
     auto* grid = new QGridLayout(group);
     grid->setContentsMargins(8, 12, 8, 8);
-    grid->setSpacing(10);
+    grid->setHorizontalSpacing(6);
+    grid->setVerticalSpacing(8);
     grid->setColumnStretch(0, 0);
     grid->setColumnStretch(1, 1);
     grid->setColumnStretch(2, 0);
@@ -527,6 +543,57 @@ QWidget* Properties::createPointWidget() {
     return gb;
 }
 
+QWidget* Properties::createDimensionWidget() {
+    auto* gb = new QGroupBox("Размер");
+    auto* gl = setupGridLayout(gb);
+
+    m_dimTypeCombo = new QComboBox();
+    m_dimTypeCombo->addItem(QIcon(":/icons/dimension-linear.svg"), "Линейный", static_cast<int>(DimensionType::Linear));
+    m_dimTypeCombo->addItem(QIcon(":/icons/dimension-horizontal.svg"), "Горизонтальный", static_cast<int>(DimensionType::Horizontal));
+    m_dimTypeCombo->addItem(QIcon(":/icons/dimension-vertical.svg"), "Вертикальный", static_cast<int>(DimensionType::Vertical));
+    m_dimTypeCombo->addItem(QIcon(":/icons/dimension-radius.svg"), "Радиус", static_cast<int>(DimensionType::Radius));
+    m_dimTypeCombo->addItem(QIcon(":/icons/dimension-diameter.svg"), "Диаметр", static_cast<int>(DimensionType::Diameter));
+    m_dimTypeCombo->addItem(QIcon(":/icons/dimension-angular.svg"), "Угловой", static_cast<int>(DimensionType::Angular));
+    m_dimTypeCombo->setEnabled(true);
+
+    m_dimValue = createSpin(0, 0, 100000);
+    m_dimTextOverrideEdit = new QLineEdit();
+    m_dimCenterTextButton = new QPushButton("Центрировать");
+    m_dimArrowCombo = new QComboBox();
+    m_dimArrowCombo->addItem(QIcon(":/icons/arrow-closed.svg"), "Закрытая", static_cast<int>(ArrowType::Closed));
+    m_dimArrowCombo->addItem(QIcon(":/icons/arrow-open.svg"), "Открытая", static_cast<int>(ArrowType::Open));
+    m_dimArrowCombo->addItem(QIcon(":/icons/arrow-tick.svg"), "Засечка", static_cast<int>(ArrowType::Tick));
+    m_dimArrowCombo->addItem(QIcon(":/icons/arrow-dot.svg"), "Точка", static_cast<int>(ArrowType::Dot));
+    m_dimArrowPlacementCombo = new QComboBox();
+    m_dimArrowPlacementCombo->addItem("Внутри", static_cast<int>(ArrowPlacement::Inside));
+    m_dimArrowPlacementCombo->addItem("Снаружи", static_cast<int>(ArrowPlacement::Outside));
+    m_dimArrowSize = createSpin(10, 1, 100);
+    m_dimTextHeight = createSpin(16, 1, 100);
+    m_dimTextOffset = createSpin(8, -100, 100);
+
+    addRow(gl, 0, createLbl("Тип:"), m_dimTypeCombo);
+    addRow(gl, 1, createLbl("Значение:"), m_dimValue);
+    addRow(gl, 2, createLbl("Текст:"), m_dimTextOverrideEdit);
+    addRow(gl, 3, createLbl("Тип стрелки:"), m_dimArrowCombo);
+    addRow(gl, 4, createLbl("Положение стрелок:"), m_dimArrowPlacementCombo);
+    addRow(gl, 5, createLbl("Размер стрелки:"), m_dimArrowSize);
+    addRow(gl, 6, createLbl("Размер шрифта:"), m_dimTextHeight);
+    addRow(gl, 7, createLbl("Отступ текста:"), m_dimTextOffset);
+    addRow(gl, 8, createLbl("Позиция текста:"), m_dimCenterTextButton);
+
+    connect(m_dimCenterTextButton, &QPushButton::clicked, this, [this]() {
+        for (auto* obj : m_currentObjects) {
+            if (auto* d = dynamic_cast<Dimension*>(obj)) {
+                d->centerText();
+            }
+        }
+        emit objectsModified(m_currentObjects);
+        if (!m_currentObjects.empty()) populateFields(m_currentObjects.front());
+    });
+
+    return gb;
+}
+
 QGroupBox* Properties::createStyleWidget() {
     auto* group = new QGroupBox("Стиль");
     auto* grid = setupGridLayout(group);
@@ -817,6 +884,21 @@ void Properties::populateFields(Object* obj) {
         m_ptY->setValue(pt->getPosition().getY());
         break;
     }
+    case PrimitiveType::Dimension: {
+        auto* d = static_cast<Dimension*>(obj);
+        int typeIdx = m_dimTypeCombo->findData(static_cast<int>(d->getDimensionType()));
+        if (typeIdx >= 0) m_dimTypeCombo->setCurrentIndex(typeIdx);
+        m_dimValue->setValue(d->measuredValue());
+        m_dimTextOverrideEdit->setText(d->getTextOverride());
+        int arrowIdx = m_dimArrowCombo->findData(static_cast<int>(d->arrowType()));
+        if (arrowIdx >= 0) m_dimArrowCombo->setCurrentIndex(arrowIdx);
+        int placementIdx = m_dimArrowPlacementCombo->findData(static_cast<int>(d->arrowPlacement()));
+        if (placementIdx >= 0) m_dimArrowPlacementCombo->setCurrentIndex(placementIdx);
+        m_dimArrowSize->setValue(d->arrowSize());
+        m_dimTextHeight->setValue(d->textHeight());
+        m_dimTextOffset->setValue(d->textOffset());
+        break;
+    }
     default: break;
     }
 }
@@ -996,6 +1078,27 @@ void Properties::updateObjectGeometry(Object* obj) {
     case PrimitiveType::Point: {
         if (auto* pt = dynamic_cast<PointObject*>(obj)) {
             pt->setPosition(readPoint(m_ptX, m_ptY));
+        }
+        break;
+    }
+    case PrimitiveType::Dimension: {
+        if (auto* d = dynamic_cast<Dimension*>(obj)) {
+            DimensionType requestedType = static_cast<DimensionType>(m_dimTypeCombo->currentData().toInt());
+            if (canConvertDimensionType(d->getDimensionType(), requestedType)) {
+                d->setDimensionType(requestedType);
+            }
+            d->setTextOverride(m_dimTextOverrideEdit->text());
+            d->setArrowType(static_cast<ArrowType>(m_dimArrowCombo->currentData().toInt()));
+            d->setArrowPlacement(static_cast<ArrowPlacement>(m_dimArrowPlacementCombo->currentData().toInt()));
+            d->setArrowSize(m_dimArrowSize->value());
+            d->setTextHeight(m_dimTextHeight->value());
+            d->setTextOffset(m_dimTextOffset->value());
+            d->setDimensionColor(m_selectedColor);
+            d->setTextColor(m_selectedColor);
+            d->setExtensionColor(m_selectedColor);
+            d->setDimensionLineStyle(m_currentStyle);
+            d->setExtensionLineStyle(m_currentStyle);
+            d->applyMeasuredValue(m_dimValue->value());
         }
         break;
     }

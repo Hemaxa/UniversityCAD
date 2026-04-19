@@ -14,6 +14,7 @@
 #include "Ellipse.h"
 #include "Spline.h"
 #include "PointObject.h"
+#include "Dimension.h"
 #include "MathUtils.h"
 
 #include <QPainter>
@@ -23,6 +24,7 @@
 #include <QGridLayout>
 #include <QtMath>
 #include <QRubberBand>
+#include <QInputDialog>
 #include <limits>
 
 Viewport::Viewport(QWidget *parent) : QWidget(parent)
@@ -39,6 +41,7 @@ Viewport::Viewport(QWidget *parent) : QWidget(parent)
     connect(m_contextMenu, &ContextMenu::zoomExtentsTriggered, this, &Viewport::zoomToExtents);
     connect(m_contextMenu, &ContextMenu::rotateLeftTriggered, this, &Viewport::rotateLeft);
     connect(m_contextMenu, &ContextMenu::rotateRightTriggered, this, &Viewport::rotateRight);
+    connect(m_contextMenu, &ContextMenu::dimensionToolTriggered, this, &Viewport::setActiveDimensionTool);
 
     setContextMenuPolicy(Qt::CustomContextMenu);
     connect(this, &QWidget::customContextMenuRequested, this, &Viewport::showContextMenu);
@@ -101,9 +104,17 @@ void Viewport::setActiveTool(PrimitiveType type, int subMethod) {
     case PrimitiveType::Point:
         m_currentTool = std::make_unique<CreatePointTool>();
         break;
+    case PrimitiveType::Dimension:
+        m_currentTool = std::make_unique<CreateDimensionTool>(static_cast<DimensionType>(subMethod));
+        break;
     default: m_currentTool.reset(); break;
     }
     update();
+}
+
+void Viewport::setActiveDimensionTool(DimensionType type)
+{
+    setActiveTool(PrimitiveType::Dimension, static_cast<int>(type));
 }
 
 void Viewport::resetTool() {
@@ -195,10 +206,32 @@ void Viewport::mousePressEvent(QMouseEvent *event) {
     } else {
         if (event->button() == Qt::LeftButton) {
             if (getGizmoRect().contains(event->pos())) { m_camera->rotateLeft(); return; }
+
+            if (m_scene) {
+                const auto& primitives = m_scene->getPrimitives();
+                for (auto it = primitives.rbegin(); it != primitives.rend(); ++it) {
+                    if ((*it)->getType() != PrimitiveType::Dimension) continue;
+                    auto* dim = static_cast<Dimension*>(it->get());
+                    if (beginDimensionGripDrag(dim, worldP)) {
+                        m_selectedObjects = {dim};
+                        emit selectionChanged(m_selectedObjects);
+                        update();
+                        return;
+                    }
+                }
+            }
             
             // Проверяем, попал ли клик непосредственно по объекту
             Object* clickedObject = pickObjectAtPoint(event->pos());
             if (clickedObject) {
+                if (clickedObject->getType() == PrimitiveType::Dimension) {
+                    auto* dim = static_cast<Dimension*>(clickedObject);
+                    Point tp = dim->getTextPosition();
+                    const double textHit = 28.0 / m_camera->getZoomFactor();
+                    if (MathUtils::dist(worldP, tp) <= textHit) {
+                        m_draggingDimensionText = dim;
+                    }
+                }
                 // Выделяем объект для редактирования только если клик попал по нему
                 m_selectedObjects = {clickedObject};
                 emit selectionChanged(m_selectedObjects);
@@ -234,6 +267,45 @@ void Viewport::mouseMoveEvent(QMouseEvent *event) {
         m_currentTool->onMouseMove(worldP, *m_snapper, m_camera->getZoomFactor());
         update();
     }
+    else if (m_draggingDimensionText) {
+        Point target = worldP;
+        if (m_snapper) {
+            m_snapper->setGridSnap(m_gridSnapEnabled, m_gridStep);
+            m_snapper->setObjectSnap(false);
+            auto res = m_snapper->snap(worldP, m_camera->getZoomFactor());
+            if (res.snapped) target = res.point;
+            m_snapper->setObjectSnap(m_objectSnapEnabled);
+        }
+        m_draggingDimensionText->setTextPosition(target);
+        emit selectionChanged(m_selectedObjects);
+        update();
+    }
+    else if (m_draggingDimensionGrip) {
+        Point target = worldP;
+        DimensionAnchor anchor;
+        if (m_snapper) {
+            m_snapper->setGridSnap(m_gridSnapEnabled, m_gridStep);
+            m_snapper->setObjectSnap(m_objectSnapEnabled);
+            auto res = m_snapper->snap(worldP, m_camera->getZoomFactor());
+            if (res.snapped) {
+                target = res.point;
+                if (res.object && res.object->getType() != PrimitiveType::Dimension) {
+                    anchor.object = res.object;
+                    anchor.snapIndex = res.snapIndex;
+                }
+            }
+        }
+        anchor.fallback = target;
+        if (m_dimensionGripIndex == 0) {
+            m_draggingDimensionGrip->setFirstAnchor(anchor);
+        } else if (m_dimensionGripIndex == 1) {
+            m_draggingDimensionGrip->setSecondAnchor(anchor);
+        } else {
+            m_draggingDimensionGrip->setLinePoint(target);
+        }
+        emit selectionChanged(m_selectedObjects);
+        update();
+    }
     else if (m_isSelecting) {
         m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, event->pos()).normalized());
     }
@@ -249,7 +321,62 @@ void Viewport::mouseReleaseEvent(QMouseEvent *event) {
         update();
     } else if (event->button() == Qt::MiddleButton) {
         m_isPanning = false; setCursor(Qt::ArrowCursor);
+    } else if (event->button() == Qt::LeftButton && m_draggingDimensionText) {
+        m_draggingDimensionText = nullptr;
+    } else if (event->button() == Qt::LeftButton && m_draggingDimensionGrip) {
+        m_draggingDimensionGrip = nullptr;
+        m_dimensionGripIndex = -1;
     }
+}
+
+void Viewport::mouseDoubleClickEvent(QMouseEvent *event) {
+    if (event->button() != Qt::LeftButton) return;
+    QPointF worldF = screenToWorld(event->position());
+    Point worldP(worldF.x(), worldF.y());
+    Object* clickedObject = pickObjectAtPoint(event->pos());
+    if (!clickedObject || clickedObject->getType() != PrimitiveType::Dimension) return;
+
+    auto* dim = static_cast<Dimension*>(clickedObject);
+    const double textHit = 22.0 / m_camera->getZoomFactor();
+    if (MathUtils::dist(worldP, dim->getTextPosition()) > textHit) return;
+
+    bool ok = false;
+    double value = QInputDialog::getDouble(this, "Изменить размер", "Значение:", dim->measuredValue(), 0.001, 1000000.0, 2, &ok);
+    if (!ok) return;
+    dim->setTextOverride(QString());
+    dim->applyMeasuredValue(value);
+    m_selectedObjects = {dim};
+    emit selectionChanged(m_selectedObjects);
+    update();
+}
+
+bool Viewport::beginDimensionGripDrag(Dimension* dim, const Point& worldPoint)
+{
+    if (!dim) return false;
+    const double hit = 20.0 / m_camera->getZoomFactor();
+    std::vector<Point> grips;
+    if (dim->getDimensionType() == DimensionType::Radius || dim->getDimensionType() == DimensionType::Diameter) {
+        grips = {dim->getLinePoint(), dim->firstAnchor().resolve(), dim->secondAnchor().resolve()};
+    } else {
+        grips = {dim->firstAnchor().resolve(), dim->secondAnchor().resolve(), dim->getLineGripPosition(), dim->getLinePoint()};
+    }
+    double best = hit;
+    int bestIndex = -1;
+    for (int i = 0; i < static_cast<int>(grips.size()); ++i) {
+        double d = MathUtils::dist(worldPoint, grips[i]);
+        if (d <= best) {
+            best = d;
+            bestIndex = i;
+        }
+    }
+    if (bestIndex < 0) return false;
+    m_draggingDimensionGrip = dim;
+    if (dim->getDimensionType() == DimensionType::Radius || dim->getDimensionType() == DimensionType::Diameter) {
+        m_dimensionGripIndex = bestIndex == 0 ? 2 : bestIndex - 1;
+    } else {
+        m_dimensionGripIndex = bestIndex;
+    }
+    return true;
 }
 
 Object* Viewport::pickObjectAtPoint(const QPoint& screenPoint) {

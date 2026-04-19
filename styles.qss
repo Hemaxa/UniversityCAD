@@ -80,7 +80,7 @@ QDoubleSpinBox, QSpinBox, QComboBox, QLineEdit {
     border-radius: 4px;
     padding: 4px 6px;
     min-height: 20px;
-    min-width: 60px;
+    min-width: 44px;
 }
 
 QDoubleSpinBox:focus, QSpinBox:focus, QComboBox:focus, QLineEdit:focus {

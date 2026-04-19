@@ -17,6 +17,7 @@ class QGroupBox;
 class QGridLayout;
 class QVBoxLayout;
 class QScrollArea;
+class QLineEdit;
 
 class Properties : public QWidget
 {
@@ -63,6 +64,7 @@ private:
     QWidget* createPolygonWidget();
     QWidget* createSplineWidget();
     QWidget* createPointWidget();
+    QWidget* createDimensionWidget();
     QGroupBox* createStyleWidget();
 
     void populateFields(Object* obj);
@@ -115,6 +117,15 @@ private:
 
     // Поля для точки
     QDoubleSpinBox *m_ptX, *m_ptY;
+
+    QComboBox* m_dimTypeCombo;
+    QDoubleSpinBox *m_dimValue, *m_dimArrowSize, *m_dimTextHeight, *m_dimTextOffset;
+    QComboBox* m_dimArrowCombo;
+    QComboBox* m_dimArrowPlacementCombo;
+    QPushButton* m_dimColorButton;
+    QPushButton* m_dimCenterTextButton;
+    QLineEdit* m_dimTextOverrideEdit;
+    QString m_dimTextOverride;
 
     CoordinateSystemType m_coordSystem = CoordinateSystemType::Cartesian;
     QColor m_selectedColor = Qt::white;

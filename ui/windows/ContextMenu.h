@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QMenu>
+#include "Enums.h"
 
 // Класс контекстного меню, предоставляющий быстрый доступ к командам навигации.
 class ContextMenu : public QMenu
@@ -26,6 +27,8 @@ signals:
 
     // Сигнал выбора пункта "Повернуть вправо".
     void rotateRightTriggered();
+
+    void dimensionToolTriggered(DimensionType type);
 
 private:
     // Создает и настраивает QAction для меню.

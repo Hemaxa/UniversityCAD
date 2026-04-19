@@ -2,10 +2,12 @@
 
 #include "Enums.h"
 #include "Point.h"
+#include "Dimension.h"
 #include <QPainter>
 #include <memory>
 #include <optional>
 #include <vector>
+#include <utility>
 
 class Scene;
 class Snapper;
@@ -159,4 +161,25 @@ private:
     std::vector<Point> m_points;
     Point m_currentPos;
     std::unique_ptr<Object> m_result;
+};
+
+// --- Dimension ---
+class CreateDimensionTool : public Tool {
+public:
+    explicit CreateDimensionTool(DimensionType type);
+    void onMousePress(const Point& worldPos, const Snapper& snapper, double scale) override;
+    void onMouseMove(const Point& worldPos, const Snapper& snapper, double scale) override;
+    void draw(QPainter& painter, double scale) override;
+    std::unique_ptr<Object> takeObject() override;
+    void reset() override;
+
+private:
+    DimensionAnchor makeAnchor(const Point& raw, const Snapper& snapper, double scale) const;
+
+    DimensionType m_type;
+    std::vector<DimensionAnchor> m_anchors;
+    Point m_cursorPos;
+    std::unique_ptr<Object> m_result;
+    std::optional<std::pair<Point, Point>> m_hoverEdge;
+    std::vector<std::pair<Point, Point>> m_dimensionEdges;
 };

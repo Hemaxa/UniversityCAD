@@ -2,6 +2,7 @@
 #include "GlobalSettings.h"
 #include <QPainter>
 #include <QPainterPath>
+#include <QFont>
 #include <QtMath>
 #include <vector>
 
@@ -923,4 +924,228 @@ void SplineDraw::draw(QPainter& painter, Object* primitive, bool isSelected) con
             painter.drawEllipse(QPointF(p.getX(), p.getY()), s/2, s/2);
         }
     }
+}
+
+static void drawArrowHead(QPainter& painter, const QPointF& tip, double angle, const Dimension* d, double invScale)
+{
+    const double size = d->arrowSize() * invScale;
+    const QPointF back(tip.x() - std::cos(angle) * size, tip.y() - std::sin(angle) * size);
+    const QPointF left(back.x() + std::cos(angle + M_PI / 2.0) * size * 0.35,
+                       back.y() + std::sin(angle + M_PI / 2.0) * size * 0.35);
+    const QPointF right(back.x() + std::cos(angle - M_PI / 2.0) * size * 0.35,
+                        back.y() + std::sin(angle - M_PI / 2.0) * size * 0.35);
+
+    if (d->arrowType() == ArrowType::Dot) {
+        painter.setBrush(d->arrowFilled() ? QBrush(d->dimensionColor()) : Qt::NoBrush);
+        painter.drawEllipse(tip, size * 0.35, size * 0.35);
+    } else if (d->arrowType() == ArrowType::Tick) {
+        painter.drawLine(QPointF(tip.x() - size * 0.35, tip.y() - size * 0.35),
+                         QPointF(tip.x() + size * 0.35, tip.y() + size * 0.35));
+    } else if (d->arrowType() == ArrowType::Open) {
+        painter.drawLine(tip, left);
+        painter.drawLine(tip, right);
+    } else {
+        QPolygonF poly;
+        poly << tip << left << right;
+        painter.setBrush(d->arrowFilled() ? QBrush(d->dimensionColor()) : Qt::NoBrush);
+        painter.drawPolygon(poly);
+    }
+}
+
+static QPen makeDimensionPen(const LineStyle& style, const QColor& color, bool isSelected)
+{
+    QPen pen(isSelected ? QColor("#F92672") : color, 1.0);
+    pen.setCosmetic(true);
+    switch (style.type) {
+    case LineStyleType::Dashed:
+        pen.setStyle(Qt::DashLine);
+        break;
+    case LineStyleType::DashDotThin:
+    case LineStyleType::DashDotThick:
+        pen.setStyle(Qt::DashDotLine);
+        break;
+    case LineStyleType::DashDotDot:
+        pen.setStyle(Qt::DashDotDotLine);
+        break;
+    default:
+        pen.setStyle(Qt::SolidLine);
+        break;
+    }
+    return pen;
+}
+
+void DimensionDraw::draw(QPainter& painter, Object* primitive, bool isSelected) const
+{
+    auto* d = static_cast<Dimension*>(primitive);
+    const double scale = std::abs(painter.transform().m11()) < 1e-9 ? 1.0 : std::abs(painter.transform().m11());
+    const double inv = 1.0 / scale;
+    QTransform worldTransform = painter.transform();
+    Point ap = d->firstAnchor().resolve();
+    Point bp = d->secondAnchor().resolve();
+    QPointF a(ap.getX(), ap.getY());
+    QPointF b(bp.getX(), bp.getY());
+    QPointF linePoint(d->getLinePoint().getX(), d->getLinePoint().getY());
+
+    QPen dimPen = makeDimensionPen(d->dimensionLineStyle(), d->dimensionColor(), isSelected);
+    QPen extPen = makeDimensionPen(d->extensionLineStyle(), d->extensionColor(), isSelected);
+
+    QPointF da = a;
+    QPointF db = b;
+    QPointF dimStart;
+    QPointF dimEnd;
+    double textAngleDeg = 0.0;
+
+    auto normalized = [](const QPointF& v) {
+        const double len = std::hypot(v.x(), v.y());
+        if (len < 1e-9) return QPointF(1.0, 0.0);
+        return QPointF(v.x() / len, v.y() / len);
+    };
+
+    auto screenAngle = [&](const QPointF& worldVector) {
+        QPointF s0 = worldTransform.map(QPointF(0, 0));
+        QPointF s1 = worldTransform.map(worldVector);
+        QPointF sv = s1 - s0;
+        return qRadiansToDegrees(std::atan2(sv.y(), sv.x()));
+    };
+
+    auto drawGrip = [&](const QPointF& worldPoint, bool square) {
+        if (!isSelected) return;
+        QPointF sp = worldTransform.map(worldPoint);
+        painter.save();
+        painter.resetTransform();
+        painter.setPen(QPen(QColor("#66D9EF"), 1.2));
+        painter.setBrush(QColor("#1A1B26"));
+        QRectF r(sp.x() - 4.0, sp.y() - 4.0, 8.0, 8.0);
+        if (square) painter.drawRect(r);
+        else painter.drawEllipse(r);
+        painter.restore();
+    };
+
+    auto drawExtension = [&](const QPointF& source, const QPointF& target, const QPointF& normal) {
+        QPointF n = normalized(normal);
+        double sign = QPointF::dotProduct(target - source, n) >= 0 ? 1.0 : -1.0;
+        QPointF overshoot = n * (sign * d->extensionOvershoot());
+        painter.drawLine(source, target + overshoot);
+    };
+
+    if (d->getDimensionType() == DimensionType::Radius || d->getDimensionType() == DimensionType::Diameter) {
+        double r = d->measuredValue();
+        if (d->getDimensionType() == DimensionType::Diameter) r *= 0.5;
+        QPointF dir = normalized(linePoint - a);
+        if (std::hypot(linePoint.x() - a.x(), linePoint.y() - a.y()) < 1e-9) {
+            dir = normalized(b - a);
+        }
+        QPointF edge1 = a + dir * r;
+        QPointF edge2 = a - dir * r;
+
+        painter.setPen(dimPen);
+        if (d->getDimensionType() == DimensionType::Radius) {
+            QPointF leaderEnd = linePoint;
+            if (std::hypot(leaderEnd.x() - a.x(), leaderEnd.y() - a.y()) < r) {
+                leaderEnd = edge1;
+            }
+            painter.drawLine(a, leaderEnd);
+            double arrowAngle = std::atan2(a.y() - edge1.y(), a.x() - edge1.x());
+            if (d->arrowPlacement() == ArrowPlacement::Inside) arrowAngle += M_PI;
+            drawArrowHead(painter, edge1, arrowAngle, d, inv);
+            textAngleDeg = screenAngle(leaderEnd - a);
+        } else {
+            painter.drawLine(edge2, edge1);
+            const bool outside = d->arrowPlacement() == ArrowPlacement::Inside;
+            drawArrowHead(painter, edge2, std::atan2(edge1.y() - edge2.y(), edge1.x() - edge2.x()) + (outside ? M_PI : 0.0), d, inv);
+            drawArrowHead(painter, edge1, std::atan2(edge2.y() - edge1.y(), edge2.x() - edge1.x()) + (outside ? M_PI : 0.0), d, inv);
+            textAngleDeg = screenAngle(edge1 - edge2);
+        }
+        drawGrip(a, false);
+        drawGrip(linePoint, true);
+    } else if (d->getDimensionType() == DimensionType::Angular) {
+        const double a1 = std::atan2(a.y() - linePoint.y(), a.x() - linePoint.x());
+        const double a2 = std::atan2(b.y() - linePoint.y(), b.x() - linePoint.x());
+        double delta = std::fmod(a2 - a1, 2.0 * M_PI);
+        if (delta > M_PI) delta -= 2.0 * M_PI;
+        if (delta < -M_PI) delta += 2.0 * M_PI;
+        const double r = d->angularRadius() > 1e-9
+            ? d->angularRadius()
+            : std::max(15.0, std::min(std::hypot(a.x() - linePoint.x(), a.y() - linePoint.y()),
+                                      std::hypot(b.x() - linePoint.x(), b.y() - linePoint.y())) * 0.65);
+        QPointF arcA(linePoint.x() + std::cos(a1) * r, linePoint.y() + std::sin(a1) * r);
+        QPointF arcB(linePoint.x() + std::cos(a1 + delta) * r, linePoint.y() + std::sin(a1 + delta) * r);
+
+        painter.setPen(extPen);
+        painter.drawLine(linePoint, a);
+        painter.drawLine(linePoint, b);
+
+        painter.setPen(dimPen);
+        QRectF rect(linePoint.x() - r, linePoint.y() - r, r * 2.0, r * 2.0);
+        painter.drawArc(rect, int(-qRadiansToDegrees(a1) * 16.0), int(-qRadiansToDegrees(delta) * 16.0));
+        const double tangentSign = delta >= 0 ? 1.0 : -1.0;
+        drawArrowHead(painter, arcA, a1 + tangentSign * M_PI / 2.0, d, inv);
+        drawArrowHead(painter, arcB, a1 + delta - tangentSign * M_PI / 2.0, d, inv);
+        const double textAngle = a1 + delta * d->textPositionFactor() + tangentSign * M_PI / 2.0;
+        textAngleDeg = screenAngle(QPointF(std::cos(textAngle), std::sin(textAngle)));
+        drawGrip(linePoint, false);
+        drawGrip(a, true);
+        drawGrip(b, true);
+    } else {
+    if (d->getDimensionType() == DimensionType::Horizontal) {
+        da = QPointF(a.x(), linePoint.y());
+        db = QPointF(b.x(), linePoint.y());
+        textAngleDeg = screenAngle(db - da);
+    } else if (d->getDimensionType() == DimensionType::Vertical) {
+        da = QPointF(linePoint.x(), a.y());
+        db = QPointF(linePoint.x(), b.y());
+        textAngleDeg = screenAngle(db - da);
+    } else {
+        const double vx = b.x() - a.x();
+        const double vy = b.y() - a.y();
+        const double len = std::hypot(vx, vy);
+        if (len > 1e-9) {
+            const double nx = -vy / len;
+            const double ny = vx / len;
+            const double off = (linePoint.x() - a.x()) * nx + (linePoint.y() - a.y()) * ny;
+            da = QPointF(a.x() + nx * off, a.y() + ny * off);
+            db = QPointF(b.x() + nx * off, b.y() + ny * off);
+        }
+        textAngleDeg = screenAngle(db - da);
+    }
+
+    QPointF u = normalized(db - da);
+    QPointF n(-u.y(), u.x());
+    dimStart = da - u * d->dimensionExtension();
+    dimEnd = db + u * d->dimensionExtension();
+
+    painter.setPen(extPen);
+    drawExtension(a, da, n);
+    drawExtension(b, db, n);
+
+    painter.setPen(dimPen);
+    painter.drawLine(dimStart, dimEnd);
+
+    const double angle = std::atan2(db.y() - da.y(), db.x() - da.x());
+    const bool outside = d->arrowPlacement() == ArrowPlacement::Inside;
+    drawArrowHead(painter, da, angle + (outside ? M_PI : 0.0), d, inv);
+    drawArrowHead(painter, db, angle + M_PI + (outside ? M_PI : 0.0), d, inv);
+    drawGrip(a, true);
+    drawGrip(b, true);
+    Point gp = d->getLineGripPosition();
+    drawGrip(QPointF(gp.getX(), gp.getY()), false);
+    }
+
+    QPointF textPos(d->getTextPosition().getX(), d->getTextPosition().getY());
+    while (textAngleDeg > 180.0) textAngleDeg -= 360.0;
+    while (textAngleDeg < -180.0) textAngleDeg += 360.0;
+    if (textAngleDeg > 90.0) textAngleDeg -= 180.0;
+    if (textAngleDeg < -90.0) textAngleDeg += 180.0;
+
+    QPointF sp = worldTransform.map(textPos);
+    painter.save();
+    painter.resetTransform();
+    QFont font(d->fontFamily(), std::max(6, static_cast<int>(d->textHeight())));
+    painter.setFont(font);
+    painter.setPen(isSelected ? QColor("#F92672") : d->textColor());
+    painter.translate(sp);
+    painter.rotate(textAngleDeg);
+    QRectF textRect(-70, -14, 140, 28);
+    painter.drawText(textRect, Qt::AlignCenter, d->displayText());
+    painter.restore();
 }

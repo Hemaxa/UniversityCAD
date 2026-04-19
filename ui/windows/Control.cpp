@@ -2,6 +2,7 @@
 #include "Scene.h"
 #include "Object.h"
 #include "LineSettingsMenu.h"
+#include "DimensionSettingsMenu.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -77,6 +78,16 @@ Control::Control(QWidget *parent) : QWidget(parent)
     });
     lineSettingsBtn->setMenu(lineMenu);
     sceneLayout->addWidget(lineSettingsBtn, 3, 0, 1, 4);
+
+    auto* dimensionSettingsBtn = new QPushButton("Настройки размеров");
+    dimensionSettingsBtn->setIcon(QIcon(":/icons/settings.svg"));
+    auto* dimensionMenu = new DimensionSettingsMenu(this);
+    connect(dimensionMenu, &DimensionSettingsMenu::settingsChanged, this, [this](){
+        if(parentWidget()) parentWidget()->update();
+    });
+    connect(dimensionMenu, &DimensionSettingsMenu::applyToExistingRequested, this, &Control::dimensionGlobalStyleApplyRequested);
+    dimensionSettingsBtn->setMenu(dimensionMenu);
+    sceneLayout->addWidget(dimensionSettingsBtn, 4, 0, 1, 4);
 
     auto* primitivesGroup = new QGroupBox("Инструменты"); auto* primGrid = new QGridLayout(primitivesGroup); primGrid->setSpacing(5);
     m_primitiveToolsGroup = new QButtonGroup(this); m_primitiveToolsGroup->setExclusive(true);
@@ -191,6 +202,7 @@ void Control::updateObjectList(const Scene* scene) {
             case PrimitiveType::Polygon: name="Полигон"; break;
             case PrimitiveType::Spline: name="Сплайн"; break;
             case PrimitiveType::Point: name="Точка"; break;
+            case PrimitiveType::Dimension: name="Размер"; break;
             default: name="Объект"; break;
             }
             QListWidgetItem* item = new QListWidgetItem(QString("%1 %2").arg(name).arg(obj->getID()));

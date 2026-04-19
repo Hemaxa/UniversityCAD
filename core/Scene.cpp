@@ -1,4 +1,5 @@
 #include "Scene.h"
+#include "Dimension.h"
 
 #include <algorithm>
 
@@ -25,7 +26,12 @@ void Scene::removePrimitive(Object* primitiveToRemove)
         std::remove_if(m_primitives.begin(), m_primitives.end(),
             [primitiveToRemove](const std::unique_ptr<Object>& p) {
                // Сравниваем сырые указатели, чтобы найти нужный unique_ptr.
-               return p.get() == primitiveToRemove;
+               if (p.get() == primitiveToRemove) return true;
+               if (p->getType() == PrimitiveType::Dimension) {
+                   auto* d = static_cast<Dimension*>(p.get());
+                   return d->firstAnchor().object == primitiveToRemove || d->secondAnchor().object == primitiveToRemove;
+               }
+               return false;
             }),
         m_primitives.end());
 }

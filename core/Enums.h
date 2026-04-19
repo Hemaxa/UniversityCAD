@@ -10,7 +10,8 @@ enum class PrimitiveType {
     Rectangle,
     Ellipse,
     Polygon,
-    Spline
+    Spline,
+    Dimension
 };
 
 // Типы систем координат.
@@ -49,4 +50,25 @@ enum class SnapType {
     Tangent,        // Касательная (требует предыдущей точки)
     Quadrant,       // Квадрант (0, 90, 180, 270 градусов)
     Nearest         // Ближайшая точка на объекте
+};
+
+enum class DimensionType {
+    Linear,
+    Horizontal,
+    Vertical,
+    Radius,
+    Diameter,
+    Angular
+};
+
+enum class ArrowType {
+    Closed,
+    Open,
+    Tick,
+    Dot
+};
+
+enum class ArrowPlacement {
+    Inside,
+    Outside
 };

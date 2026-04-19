@@ -14,6 +14,8 @@ struct SnapResult {
     bool snapped = false;
     Point point;
     SnapType type = SnapType::None;
+    const Object* object = nullptr;
+    int snapIndex = -1;
     
     // Для касательной: отображение пунктирного продолжения (tangentPoint, extensionEnd)
     std::optional<std::pair<Point, Point>> tangentExtensionLine;

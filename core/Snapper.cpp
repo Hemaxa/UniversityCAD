@@ -38,13 +38,16 @@ SnapResult Snapper::snap(const Point& mouseWorldPos, double scaleFactor, const s
         // 1. Стандартные точки (Endpoint, Midpoint, Center, Quadrant)
         for (const auto& obj : primitives) {
             auto snaps = obj->getSnapPoints();
-            for (const auto& sp : snaps) {
+            for (int i = 0; i < static_cast<int>(snaps.size()); ++i) {
+                const auto& sp = snaps[i];
                 double d = MathUtils::dist(mouseWorldPos, sp.p);
                 if (d < bestDist) {
                     bestDist = d;
                     result.snapped = true;
                     result.point = sp.p;
                     result.type = sp.type;
+                    result.object = sp.object ? sp.object : obj.get();
+                    result.snapIndex = sp.index >= 0 ? sp.index : i;
                 }
             }
         }
@@ -136,6 +139,8 @@ SnapResult Snapper::snap(const Point& mouseWorldPos, double scaleFactor, const s
                 nearestRes.snapped = true;
                 nearestRes.point = p;
                 nearestRes.type = SnapType::Nearest;
+                nearestRes.object = obj.get();
+                nearestRes.snapIndex = -1;
             }
         }
 

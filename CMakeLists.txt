@@ -29,6 +29,8 @@ target_sources (UniversityCAD PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/Control.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/LineSettingsMenu.h
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/LineSettingsMenu.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/DimensionSettingsMenu.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/DimensionSettingsMenu.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/Properties.h
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/Properties.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/windows/Viewport.h
@@ -72,6 +74,8 @@ target_sources (UniversityCAD PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Segment.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/PointObject.h
     ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/PointObject.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Dimension.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/objects/Dimension.cpp
 )
 
 target_include_directories(UniversityCAD PRIVATE

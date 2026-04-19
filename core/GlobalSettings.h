@@ -1,5 +1,5 @@
 #pragma once
-#include "Enums.h"
+#include "Object.h"
 #include <map>
 
 struct StyleParams {
@@ -21,6 +21,23 @@ struct ZigZagParams {
     double amplitude = 3.0;       // Высота излома
     double straightLength = 15.0; // Длина прямого участка между изломами
     double breakLength = 5.0;     // Длина самого излома (наклонный участок)
+};
+
+struct DimensionStyle {
+    QColor extensionColor = Qt::white;
+    QColor dimensionColor = Qt::white;
+    QColor textColor = Qt::white;
+    LineStyle extensionLineStyle = {LineStyleType::SolidThin, "Сплошная тонкая", 0, 0, false};
+    LineStyle dimensionLineStyle = {LineStyleType::SolidThin, "Сплошная тонкая", 0, 0, false};
+    double extensionOvershoot = 6.0;
+    double dimensionExtension = 4.0;
+    ArrowType arrowType = ArrowType::Closed;
+    ArrowPlacement arrowPlacement = ArrowPlacement::Inside;
+    double arrowSize = 10.0;
+    bool arrowFilled = true;
+    QString fontFamily = "Arial";
+    double textHeight = 16.0;
+    double textOffset = 8.0;
 };
 
 class GlobalSettings {
@@ -48,6 +65,8 @@ public:
     
     // Параметры линии с изломами (общие)
     ZigZagParams zigzagParams;
+
+    DimensionStyle dimensionStyle;
 
 private:
     GlobalSettings() {

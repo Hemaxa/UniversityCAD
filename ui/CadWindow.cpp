@@ -8,6 +8,7 @@
 #include "Segment.h"
 #include "DxfExporter.h"
 #include "DxfImporter.h"
+#include "Dimension.h"
 
 #include <QSplitter>
 #include <QGuiApplication>
@@ -42,12 +43,13 @@ void CadWindow::setupUi() {
     m_rightColumnSplitter = new QSplitter(Qt::Vertical);
     m_rightColumnSplitter->addWidget(m_controlPanel);
     m_rightColumnSplitter->addWidget(m_propertiesPanel);
-    m_rightColumnSplitter->setSizes({500, 400});
+    m_rightColumnSplitter->setSizes({560, 365});
 
     m_mainSplitter = new QSplitter(Qt::Horizontal);
     m_mainSplitter->addWidget(m_viewportPanel);
     m_mainSplitter->addWidget(m_rightColumnSplitter);
     m_mainSplitter->setStretchFactor(0, 1);
+    m_mainSplitter->setSizes({900, 365});
 
     auto* menuBar = this->menuBar();
     auto* fileMenu = menuBar->addMenu("Файл");
@@ -78,6 +80,7 @@ void CadWindow::createConnections() {
 
     connect(m_controlPanel, &Control::gridSnapToggled, m_viewportPanel, &Viewport::setGridSnap);
     connect(m_controlPanel, &Control::objectSnapToggled, m_viewportPanel, &Viewport::setObjectSnap);
+    connect(m_controlPanel, &Control::dimensionGlobalStyleApplyRequested, this, &CadWindow::onApplyDimensionGlobalStyle);
 
     new QShortcut(QKeySequence(Qt::Key_Escape), this, SLOT(onEscapePressed()));
 }
@@ -91,6 +94,7 @@ void CadWindow::setupDrawingStrategies() {
     m_drawingStrategies[PrimitiveType::Polygon] = std::make_unique<PolygonDraw>();
     m_drawingStrategies[PrimitiveType::Spline] = std::make_unique<SplineDraw>();
     m_drawingStrategies[PrimitiveType::Point] = std::make_unique<PointDraw>();
+    m_drawingStrategies[PrimitiveType::Dimension] = std::make_unique<DimensionDraw>();
 }
 
 void CadWindow::onPrimitiveTypeSelected(PrimitiveType type, int methodIndex) {
@@ -145,6 +149,15 @@ void CadWindow::onObjectsSelectedFromList(const std::vector<Object*>& selectedOb
 }
 
 void CadWindow::onObjectsModified(const std::vector<Object*>&) {
+    m_viewportPanel->update();
+}
+
+void CadWindow::onApplyDimensionGlobalStyle() {
+    for (const auto& obj : m_scene->getPrimitives()) {
+        if (obj->getType() == PrimitiveType::Dimension) {
+            static_cast<Dimension*>(obj.get())->applyGlobalStyle();
+        }
+    }
     m_viewportPanel->update();
 }
 

@@ -8,10 +8,14 @@
 #include <optional>
 #include <utility>
 
+class Object;
+
 // Точка привязки с информацией о типе.
 struct SnapPoint {
     Point p;
     SnapType type;
+    const Object* object = nullptr;
+    int index = -1;
 };
 
 // Стиль линии по ГОСТ.
@@ -76,4 +80,3 @@ private:
     QString m_layer = "0";
     unsigned int m_id = 0;
 };
-

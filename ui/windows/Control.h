@@ -81,6 +81,7 @@ signals:
     void objectSnapToggled(bool enabled);
     // Сигнал выбора типа примитива и метода.
     void primitiveTypeSelected(PrimitiveType type, int methodIndex);
+    void dimensionGlobalStyleApplyRequested();
 
 private slots:
     void onCartesianClicked();

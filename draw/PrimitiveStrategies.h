@@ -10,6 +10,7 @@
 #include "Polygon.h"
 #include "Spline.h"
 #include "PointObject.h"
+#include "Dimension.h"
 
 // --- Point ---
 class PointDraw : public Draw {
@@ -55,6 +56,12 @@ public:
 
 // --- Spline ---
 class SplineDraw : public Draw {
+public:
+    void draw(QPainter& painter, Object* primitive, bool isSelected) const override;
+};
+
+// --- Dimension ---
+class DimensionDraw : public Draw {
 public:
     void draw(QPainter& painter, Object* primitive, bool isSelected) const override;
 };

@@ -8,6 +8,8 @@
 #include "Polygon.h"
 #include "Spline.h"
 #include "PointObject.h"
+#include "Dimension.h"
+#include "GlobalSettings.h"
 #include "MathUtils.h"
 #include "Properties.h"
 #include <cmath>
@@ -759,3 +761,259 @@ void CreatePointTool::draw(QPainter& painter, double scale) {
 
 std::unique_ptr<Object> CreatePointTool::takeObject() { return std::move(m_result); }
 void CreatePointTool::reset() { m_finished = false; }
+
+// --- Dimension ---
+CreateDimensionTool::CreateDimensionTool(DimensionType type) : m_type(type) {}
+
+DimensionAnchor CreateDimensionTool::makeAnchor(const Point& raw, const Snapper& snapper, double scale) const
+{
+    auto res = snapper.snap(raw, scale);
+    DimensionAnchor anchor;
+    anchor.fallback = res.snapped ? res.point : raw;
+    if (res.object && res.object->getType() != PrimitiveType::Dimension) {
+        anchor.object = res.object;
+        anchor.snapIndex = res.snapIndex;
+    }
+    return anchor;
+}
+
+static std::optional<std::pair<Point, Point>> nearestDimensionEdge(const Object* obj, const Point& p)
+{
+    if (!obj || obj->getType() == PrimitiveType::Dimension) return std::nullopt;
+
+    std::vector<std::pair<Point, Point>> edges;
+    if (obj->getType() == PrimitiveType::Segment) {
+        auto* s = static_cast<const Segment*>(obj);
+        edges.push_back({s->getStart(), s->getEnd()});
+    } else if (obj->getType() == PrimitiveType::Rectangle) {
+        auto* r = static_cast<const Rectangle*>(obj);
+        double x = r->getTopLeft().getX();
+        double y = r->getTopLeft().getY();
+        double w = r->getWidth();
+        double h = r->getHeight();
+        Point tl(x, y), tr(x + w, y), br(x + w, y - h), bl(x, y - h);
+        edges = {{tl, tr}, {tr, br}, {br, bl}, {bl, tl}};
+    } else if (obj->getType() == PrimitiveType::Polygon) {
+        auto* poly = static_cast<const PolygonObj*>(obj);
+        auto vertices = poly->getVertices();
+        for (int i = 0; i < static_cast<int>(vertices.size()); ++i) {
+            edges.push_back({vertices[i], vertices[(i + 1) % vertices.size()]});
+        }
+    }
+
+    if (edges.empty()) return std::nullopt;
+    double best = std::numeric_limits<double>::max();
+    std::pair<Point, Point> bestEdge = edges.front();
+    for (const auto& edge : edges) {
+        Point proj = MathUtils::projectPointOnSegment(p, edge.first, edge.second);
+        double d = MathUtils::distSq(p, proj);
+        if (d < best) {
+            best = d;
+            bestEdge = edge;
+        }
+    }
+    return bestEdge;
+}
+
+static bool intersectInfiniteLines(const Point& a1, const Point& a2, const Point& b1, const Point& b2, Point& out)
+{
+    const double x1 = a1.getX(), y1 = a1.getY();
+    const double x2 = a2.getX(), y2 = a2.getY();
+    const double x3 = b1.getX(), y3 = b1.getY();
+    const double x4 = b2.getX(), y4 = b2.getY();
+    const double den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    if (std::abs(den) < 1e-9) return false;
+    const double px = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / den;
+    const double py = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / den;
+    out = Point(px, py);
+    return true;
+}
+
+static Point fartherFrom(const Point& origin, const std::pair<Point, Point>& edge)
+{
+    return MathUtils::distSq(origin, edge.first) > MathUtils::distSq(origin, edge.second) ? edge.first : edge.second;
+}
+
+void CreateDimensionTool::onMousePress(const Point& worldPos, const Snapper& snapper, double scale)
+{
+    if (m_type == DimensionType::Angular) {
+        if (m_hoverEdge && m_dimensionEdges.size() < 2) {
+            m_dimensionEdges.push_back(*m_hoverEdge);
+            return;
+        }
+        if (m_dimensionEdges.size() == 2) {
+            Point vertex;
+            if (!intersectInfiniteLines(m_dimensionEdges[0].first, m_dimensionEdges[0].second,
+                                        m_dimensionEdges[1].first, m_dimensionEdges[1].second,
+                                        vertex)) {
+                reset();
+                return;
+            }
+            DimensionAnchor a;
+            a.fallback = fartherFrom(vertex, m_dimensionEdges[0]);
+            DimensionAnchor b;
+            b.fallback = fartherFrom(vertex, m_dimensionEdges[1]);
+            auto dim = std::make_unique<Dimension>(m_type, a, b, vertex);
+            dim->setAngularRadius(std::max(5.0, MathUtils::dist(vertex, worldPos)));
+            m_result = std::move(dim);
+            m_finished = true;
+            return;
+        }
+        if (m_anchors.size() < 2) {
+            m_anchors.push_back(makeAnchor(worldPos, snapper, scale));
+        } else {
+            auto third = makeAnchor(worldPos, snapper, scale);
+            DimensionAnchor firstRay = m_anchors[1];
+            DimensionAnchor secondRay = third;
+            m_result = std::make_unique<Dimension>(m_type, firstRay, secondRay, m_anchors[0].resolve());
+            m_finished = true;
+        }
+        return;
+    }
+
+    if (m_type == DimensionType::Radius || m_type == DimensionType::Diameter) {
+        if (m_anchors.empty()) {
+            auto picked = makeAnchor(worldPos, snapper, scale);
+            DimensionAnchor center = picked;
+            DimensionAnchor edge = picked;
+            if (picked.object && picked.object->getType() == PrimitiveType::Circle) {
+                auto* c = static_cast<const Circle*>(picked.object);
+                center.fallback = c->getCenter();
+                center.snapIndex = 0;
+                edge.fallback = picked.fallback;
+                edge.snapIndex = -1;
+            }
+            m_anchors.push_back(center);
+            m_anchors.push_back(edge);
+        } else {
+            auto placed = makeAnchor(worldPos, snapper, scale);
+            m_result = std::make_unique<Dimension>(m_type, m_anchors[0], m_anchors[1], placed.fallback);
+            m_finished = true;
+        }
+        return;
+    }
+
+    if (m_anchors.size() < 2) {
+        m_anchors.push_back(makeAnchor(worldPos, snapper, scale));
+        return;
+    }
+
+    Point linePoint = makeAnchor(worldPos, snapper, scale).fallback;
+    m_result = std::make_unique<Dimension>(m_type, m_anchors[0], m_anchors[1], linePoint);
+    m_finished = true;
+}
+
+void CreateDimensionTool::onMouseMove(const Point& worldPos, const Snapper& snapper, double scale)
+{
+    auto res = snapper.snap(worldPos, scale);
+    m_cursorPos = res.snapped ? res.point : worldPos;
+    m_snapPoint = m_cursorPos;
+    m_isSnapped = res.snapped;
+    m_hoverEdge.reset();
+    if ((m_type == DimensionType::Horizontal || m_type == DimensionType::Vertical || m_type == DimensionType::Linear || m_type == DimensionType::Angular)
+        && res.object && res.object->getType() != PrimitiveType::Dimension) {
+        m_hoverEdge = nearestDimensionEdge(res.object, m_cursorPos);
+    }
+}
+
+void CreateDimensionTool::draw(QPainter& painter, double scale)
+{
+    if (m_isSnapped) drawSnapMarker(painter, m_snapPoint, scale);
+    QPen pen(QColor("#A6E22E"), 1.0 / scale, Qt::DashLine);
+    painter.setPen(pen);
+    painter.setBrush(Qt::NoBrush);
+    if (m_hoverEdge) {
+        QPen edgePen(QColor("#66D9EF"), 2.0 / scale);
+        painter.setPen(edgePen);
+        painter.drawLine(QPointF(m_hoverEdge->first.getX(), m_hoverEdge->first.getY()),
+                         QPointF(m_hoverEdge->second.getX(), m_hoverEdge->second.getY()));
+        painter.setPen(pen);
+    }
+
+    auto drawPreviewDimension = [&](const Point& pa, const Point& pb, const Point& linePoint) {
+        QPointF a(pa.getX(), pa.getY());
+        QPointF b(pb.getX(), pb.getY());
+        QPointF lp(linePoint.getX(), linePoint.getY());
+        QPointF da = a;
+        QPointF db = b;
+        if (m_type == DimensionType::Horizontal) {
+            da = QPointF(a.x(), lp.y());
+            db = QPointF(b.x(), lp.y());
+        } else if (m_type == DimensionType::Vertical) {
+            da = QPointF(lp.x(), a.y());
+            db = QPointF(lp.x(), b.y());
+        } else {
+            double vx = b.x() - a.x();
+            double vy = b.y() - a.y();
+            double len = std::hypot(vx, vy);
+            if (len > 1e-9) {
+                double nx = -vy / len;
+                double ny = vx / len;
+                double off = (lp.x() - a.x()) * nx + (lp.y() - a.y()) * ny;
+                da = QPointF(a.x() + nx * off, a.y() + ny * off);
+                db = QPointF(b.x() + nx * off, b.y() + ny * off);
+            }
+        }
+        painter.drawLine(a, da);
+        painter.drawLine(b, db);
+        painter.drawLine(da, db);
+    };
+
+    if (m_type == DimensionType::Angular && m_anchors.size() == 1) {
+        Point v = m_anchors[0].resolve();
+        painter.drawLine(QPointF(v.getX(), v.getY()), QPointF(m_cursorPos.getX(), m_cursorPos.getY()));
+    } else if (m_type == DimensionType::Angular && m_anchors.size() >= 2) {
+        Point v = m_anchors[0].resolve();
+        Point a = m_anchors[1].resolve();
+        painter.drawLine(QPointF(v.getX(), v.getY()), QPointF(a.getX(), a.getY()));
+        painter.drawLine(QPointF(v.getX(), v.getY()), QPointF(m_cursorPos.getX(), m_cursorPos.getY()));
+        double r = std::max(15.0 / scale, std::min(MathUtils::dist(v, a), MathUtils::dist(v, m_cursorPos)) * 0.65);
+        QRectF arcRect(v.getX() - r, v.getY() - r, r * 2.0, r * 2.0);
+        double a1 = std::atan2(a.getY() - v.getY(), a.getX() - v.getX()) * 180.0 / M_PI;
+        double a2 = std::atan2(m_cursorPos.getY() - v.getY(), m_cursorPos.getX() - v.getX()) * 180.0 / M_PI;
+        double span = a2 - a1;
+        if (span > 180.0) span -= 360.0;
+        if (span < -180.0) span += 360.0;
+        painter.drawArc(arcRect, int(-a1 * 16.0), int(-span * 16.0));
+    } else if (m_type == DimensionType::Angular && m_dimensionEdges.size() == 1) {
+        painter.drawLine(QPointF(m_dimensionEdges[0].first.getX(), m_dimensionEdges[0].first.getY()),
+                         QPointF(m_dimensionEdges[0].second.getX(), m_dimensionEdges[0].second.getY()));
+    } else if (m_type == DimensionType::Angular && m_dimensionEdges.size() == 2) {
+        Point vertex;
+        if (intersectInfiniteLines(m_dimensionEdges[0].first, m_dimensionEdges[0].second,
+                                   m_dimensionEdges[1].first, m_dimensionEdges[1].second,
+                                   vertex)) {
+            Point a = fartherFrom(vertex, m_dimensionEdges[0]);
+            Point b = fartherFrom(vertex, m_dimensionEdges[1]);
+            painter.drawLine(QPointF(vertex.getX(), vertex.getY()), QPointF(a.getX(), a.getY()));
+            painter.drawLine(QPointF(vertex.getX(), vertex.getY()), QPointF(b.getX(), b.getY()));
+            double r = std::max(5.0, MathUtils::dist(vertex, m_cursorPos));
+            QRectF arcRect(vertex.getX() - r, vertex.getY() - r, r * 2.0, r * 2.0);
+            double a1 = std::atan2(a.getY() - vertex.getY(), a.getX() - vertex.getX()) * 180.0 / M_PI;
+            double a2 = std::atan2(b.getY() - vertex.getY(), b.getX() - vertex.getX()) * 180.0 / M_PI;
+            double span = a2 - a1;
+            if (span > 180.0) span -= 360.0;
+            if (span < -180.0) span += 360.0;
+            painter.drawArc(arcRect, int(-a1 * 16.0), int(-span * 16.0));
+        }
+    } else if ((m_type == DimensionType::Radius || m_type == DimensionType::Diameter) && m_anchors.size() >= 2) {
+        Point c = m_anchors[0].resolve();
+        painter.drawLine(QPointF(c.getX(), c.getY()), QPointF(m_cursorPos.getX(), m_cursorPos.getY()));
+    } else if (m_anchors.size() == 1) {
+        Point a = m_anchors[0].resolve();
+        painter.drawLine(QPointF(a.getX(), a.getY()), QPointF(m_cursorPos.getX(), m_cursorPos.getY()));
+    } else if (m_anchors.size() >= 2) {
+        Point a = m_anchors[0].resolve();
+        Point b = m_anchors[1].resolve();
+        drawPreviewDimension(a, b, m_cursorPos);
+    }
+}
+
+std::unique_ptr<Object> CreateDimensionTool::takeObject() { return std::move(m_result); }
+void CreateDimensionTool::reset() {
+    m_finished = false;
+    m_anchors.clear();
+    m_dimensionEdges.clear();
+    m_hoverEdge.reset();
+    m_result.reset();
+}

@@ -30,5 +30,15 @@
         <file>icons/line-solid-thin.svg</file>
         <file>icons/line-wavy.svg</file>
         <file>icons/line-zigzag.svg</file>
+        <file>icons/arrow-closed.svg</file>
+        <file>icons/arrow-open.svg</file>
+        <file>icons/arrow-tick.svg</file>
+        <file>icons/arrow-dot.svg</file>
+        <file>icons/dimension-linear.svg</file>
+        <file>icons/dimension-horizontal.svg</file>
+        <file>icons/dimension-vertical.svg</file>
+        <file>icons/dimension-radius.svg</file>
+        <file>icons/dimension-diameter.svg</file>
+        <file>icons/dimension-angular.svg</file>
     </qresource>
 </RCC>

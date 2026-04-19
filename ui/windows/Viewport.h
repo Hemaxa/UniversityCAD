@@ -16,6 +16,7 @@ class Camera;
 class ContextMenu;
 class QRubberBand;
 class Snapper;
+class Dimension;
 
 class Viewport : public QWidget
 {
@@ -31,6 +32,7 @@ public:
     void setZoomStep(double step);
 
     void setActiveTool(PrimitiveType type, int subMethod);
+    void setActiveDimensionTool(DimensionType type);
     void resetTool();
 
     QPointF worldToScreen(const QPointF& worldPos) const;
@@ -58,6 +60,7 @@ signals:
 protected:
     void paintEvent(QPaintEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
+    void mouseDoubleClickEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
@@ -79,6 +82,7 @@ private:
     
     // Поиск объекта по точке (для клика)
     Object* pickObjectAtPoint(const QPoint& screenPoint);
+    bool beginDimensionGripDrag(Dimension* dim, const Point& worldPoint);
 
     Scene* m_scene = nullptr;
     const std::map<PrimitiveType, std::unique_ptr<Draw>>* m_drawingStrategies = nullptr;
@@ -105,6 +109,9 @@ private:
     QRubberBand* m_rubberBand;
     QPoint m_rubberBandOrigin;
     bool m_isSelecting = false;
+    Dimension* m_draggingDimensionText = nullptr;
+    Dimension* m_draggingDimensionGrip = nullptr;
+    int m_dimensionGripIndex = -1;
 
     QLabel* m_infoLabel;
     QPointF m_currentMouseWorldPos{0.0, 0.0};
