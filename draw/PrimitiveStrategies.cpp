@@ -1072,8 +1072,19 @@ void DimensionDraw::draw(QPainter& painter, Object* primitive, bool isSelected) 
         QPointF arcB(linePoint.x() + std::cos(a1 + delta) * r, linePoint.y() + std::sin(a1 + delta) * r);
 
         painter.setPen(extPen);
-        painter.drawLine(linePoint, a);
-        painter.drawLine(linePoint, b);
+        auto drawAngularExtension = [&](double angle, const QPointF& source) {
+            QPointF dir(std::cos(angle), std::sin(angle));
+            double sourceRadius = std::hypot(source.x() - linePoint.x(), source.y() - linePoint.y());
+            double endRadius = r + d->extensionOvershoot();
+            if (endRadius < sourceRadius) {
+                std::swap(sourceRadius, endRadius);
+            }
+            QPointF from(linePoint.x() + dir.x() * sourceRadius, linePoint.y() + dir.y() * sourceRadius);
+            QPointF to(linePoint.x() + dir.x() * endRadius, linePoint.y() + dir.y() * endRadius);
+            painter.drawLine(from, to);
+        };
+        drawAngularExtension(a1, a);
+        drawAngularExtension(a1 + delta, b);
 
         painter.setPen(dimPen);
         QRectF rect(linePoint.x() - r, linePoint.y() - r, r * 2.0, r * 2.0);
@@ -1094,7 +1105,7 @@ void DimensionDraw::draw(QPainter& painter, Object* primitive, bool isSelected) 
     } else if (d->getDimensionType() == DimensionType::Vertical) {
         da = QPointF(linePoint.x(), a.y());
         db = QPointF(linePoint.x(), b.y());
-        textAngleDeg = screenAngle(db - da);
+        textAngleDeg = -90.0;
     } else {
         const double vx = b.x() - a.x();
         const double vy = b.y() - a.y();

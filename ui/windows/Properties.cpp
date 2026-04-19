@@ -269,7 +269,29 @@ QWidget* Properties::createCircleWidget() {
     m_coordLabels[PrimitiveType::Circle] = labels;
 
     gl->addWidget(m_circleStack);
-    connect(m_circleMethodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), m_circleStack, &QStackedWidget::setCurrentIndex);
+    connect(m_circleMethodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int next) {
+        int old = m_circleStack->currentIndex();
+        Point c;
+        double r = 50.0;
+        if (old == 0) { c = readPoint(m_circCX, m_circCY); r = m_circR->value(); }
+        else if (old == 1) { c = readPoint(m_circCX_D, m_circCY_D); r = m_circD->value() / 2.0; }
+        else if (old == 2) {
+            Point p1 = readPoint(m_circ2P1X, m_circ2P1Y), p2 = readPoint(m_circ2P2X, m_circ2P2Y);
+            c = Point((p1.getX() + p2.getX()) / 2.0, (p1.getY() + p2.getY()) / 2.0);
+            r = MathUtils::dist(p1, p2) / 2.0;
+        } else {
+            Point p1 = readPoint(m_circ3P1X, m_circ3P1Y), p2 = readPoint(m_circ3P2X, m_circ3P2Y), p3 = readPoint(m_circ3P3X, m_circ3P3Y);
+            MathUtils::getCircleFrom3Points(p1, p2, p3, c, r);
+        }
+        m_circCX->setValue(c.getX()); m_circCY->setValue(c.getY()); m_circR->setValue(r);
+        m_circCX_D->setValue(c.getX()); m_circCY_D->setValue(c.getY()); m_circD->setValue(r * 2.0);
+        m_circ2P1X->setValue(c.getX() - r); m_circ2P1Y->setValue(c.getY());
+        m_circ2P2X->setValue(c.getX() + r); m_circ2P2Y->setValue(c.getY());
+        m_circ3P1X->setValue(c.getX() + r); m_circ3P1Y->setValue(c.getY());
+        m_circ3P2X->setValue(c.getX()); m_circ3P2Y->setValue(c.getY() + r);
+        m_circ3P3X->setValue(c.getX() - r); m_circ3P3Y->setValue(c.getY());
+        m_circleStack->setCurrentIndex(next);
+    });
     l->addWidget(gb);
     return w;
 }
@@ -337,7 +359,30 @@ QWidget* Properties::createArcWidget() {
     m_coordLabels[PrimitiveType::Arc] = labels;
 
     gl->addWidget(m_arcStack);
-    connect(m_arcMethodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), m_arcStack, &QStackedWidget::setCurrentIndex);
+    connect(m_arcMethodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int next) {
+        int old = m_arcStack->currentIndex();
+        Point c;
+        double r = 50.0, start = 0.0, span = 90.0;
+        if (old == 0) {
+            c = readPoint(m_arcCX, m_arcCY);
+            r = m_arcR->value();
+            start = m_arcStart->value();
+            span = m_arcSpan->value();
+        } else {
+            Point p1 = readPoint(m_arc3P1X, m_arc3P1Y), p2 = readPoint(m_arc3P2X, m_arc3P2Y), p3 = readPoint(m_arc3P3X, m_arc3P3Y);
+            if (MathUtils::getCircleFrom3Points(p1, p2, p3, c, r)) {
+                start = qRadiansToDegrees(std::atan2(p1.getY() - c.getY(), p1.getX() - c.getX()));
+                double end = qRadiansToDegrees(std::atan2(p3.getY() - c.getY(), p3.getX() - c.getX()));
+                span = end - start;
+            }
+        }
+        m_arcCX->setValue(c.getX()); m_arcCY->setValue(c.getY()); m_arcR->setValue(r); m_arcStart->setValue(start); m_arcSpan->setValue(span);
+        double a1 = qDegreesToRadians(start), am = qDegreesToRadians(start + span / 2.0), a2 = qDegreesToRadians(start + span);
+        m_arc3P1X->setValue(c.getX() + r * std::cos(a1)); m_arc3P1Y->setValue(c.getY() + r * std::sin(a1));
+        m_arc3P2X->setValue(c.getX() + r * std::cos(am)); m_arc3P2Y->setValue(c.getY() + r * std::sin(am));
+        m_arc3P3X->setValue(c.getX() + r * std::cos(a2)); m_arc3P3Y->setValue(c.getY() + r * std::sin(a2));
+        m_arcStack->setCurrentIndex(next);
+    });
     l->addWidget(gb);
     return w;
 }
@@ -409,7 +454,27 @@ QWidget* Properties::createRectangleWidget() {
     m_coordLabels[PrimitiveType::Rectangle] = labels;
 
     gl->addWidget(m_rectStack);
-    connect(m_rectMethodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), m_rectStack, &QStackedWidget::setCurrentIndex);
+    connect(m_rectMethodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int next) {
+        int old = m_rectStack->currentIndex();
+        Point tl;
+        double w = 100.0, h = 50.0;
+        if (old == 0) {
+            Point p1 = readPoint(m_rectP1X, m_rectP1Y), p2 = readPoint(m_rectP2X, m_rectP2Y);
+            tl = Point(std::min(p1.getX(), p2.getX()), std::max(p1.getY(), p2.getY()));
+            w = std::abs(p1.getX() - p2.getX());
+            h = std::abs(p1.getY() - p2.getY());
+        } else if (old == 1) {
+            tl = readPoint(m_rect1PX, m_rect1PY); w = m_rect1W->value(); h = m_rect1H->value();
+        } else {
+            Point c = readPoint(m_rectCX, m_rectCY); w = m_rectCW->value(); h = m_rectCH->value();
+            tl = Point(c.getX() - w / 2.0, c.getY() + h / 2.0);
+        }
+        m_rectP1X->setValue(tl.getX()); m_rectP1Y->setValue(tl.getY());
+        m_rectP2X->setValue(tl.getX() + w); m_rectP2Y->setValue(tl.getY() - h);
+        m_rect1PX->setValue(tl.getX()); m_rect1PY->setValue(tl.getY()); m_rect1W->setValue(w); m_rect1H->setValue(h);
+        m_rectCX->setValue(tl.getX() + w / 2.0); m_rectCY->setValue(tl.getY() - h / 2.0); m_rectCW->setValue(w); m_rectCH->setValue(h);
+        m_rectStack->setCurrentIndex(next);
+    });
 
     m_rectChamfer = createSpin();
     auto* cl = new QHBoxLayout();
@@ -482,7 +547,23 @@ QWidget* Properties::createEllipseWidget() {
     m_coordLabels[PrimitiveType::Ellipse] = labels;
 
     gl->addWidget(m_ellStack);
-    connect(m_ellMethodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), m_ellStack, &QStackedWidget::setCurrentIndex);
+    connect(m_ellMethodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int next) {
+        int old = m_ellStack->currentIndex();
+        Point c;
+        double rx = 60.0, ry = 30.0;
+        if (old == 0) {
+            c = readPoint(m_ellCX, m_ellCY); rx = m_ellRX->value(); ry = m_ellRY->value();
+        } else {
+            c = readPoint(m_ell2CX, m_ell2CY);
+            rx = MathUtils::dist(c, readPoint(m_ell2P1X, m_ell2P1Y));
+            ry = MathUtils::dist(c, readPoint(m_ell2P2X, m_ell2P2Y));
+        }
+        m_ellCX->setValue(c.getX()); m_ellCY->setValue(c.getY()); m_ellRX->setValue(rx); m_ellRY->setValue(ry);
+        m_ell2CX->setValue(c.getX()); m_ell2CY->setValue(c.getY());
+        m_ell2P1X->setValue(c.getX() + rx); m_ell2P1Y->setValue(c.getY());
+        m_ell2P2X->setValue(c.getX()); m_ell2P2Y->setValue(c.getY() + ry);
+        m_ellStack->setCurrentIndex(next);
+    });
     l->addWidget(gb);
     return w;
 }

@@ -9,6 +9,7 @@
 #include "DxfExporter.h"
 #include "DxfImporter.h"
 #include "Dimension.h"
+#include "GlobalSettings.h"
 
 #include <QSplitter>
 #include <QGuiApplication>
@@ -83,6 +84,12 @@ void CadWindow::createConnections() {
     connect(m_controlPanel, &Control::dimensionGlobalStyleApplyRequested, this, &CadWindow::onApplyDimensionGlobalStyle);
 
     new QShortcut(QKeySequence(Qt::Key_Escape), this, SLOT(onEscapePressed()));
+    auto* deleteShortcut = new QShortcut(QKeySequence::Delete, this);
+    deleteShortcut->setContext(Qt::ApplicationShortcut);
+    connect(deleteShortcut, &QShortcut::activated, this, &CadWindow::onDeleteRequested);
+    auto* backspaceShortcut = new QShortcut(QKeySequence(Qt::Key_Backspace), this);
+    backspaceShortcut->setContext(Qt::ApplicationShortcut);
+    connect(backspaceShortcut, &QShortcut::activated, this, &CadWindow::onDeleteRequested);
 }
 
 void CadWindow::setupDrawingStrategies() {
@@ -153,9 +160,15 @@ void CadWindow::onObjectsModified(const std::vector<Object*>&) {
 }
 
 void CadWindow::onApplyDimensionGlobalStyle() {
+    const auto& globalStyle = GlobalSettings::instance().dimensionStyle;
     for (const auto& obj : m_scene->getPrimitives()) {
         if (obj->getType() == PrimitiveType::Dimension) {
-            static_cast<Dimension*>(obj.get())->applyGlobalStyle();
+            auto* dim = static_cast<Dimension*>(obj.get());
+            dim->applyGlobalStyle();
+            dim->setDimensionColor(globalStyle.dimensionColor);
+            dim->setExtensionColor(globalStyle.extensionColor);
+            dim->setTextColor(globalStyle.textColor);
+            dim->setColor(globalStyle.dimensionColor);
         }
     }
     m_viewportPanel->update();

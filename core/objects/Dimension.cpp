@@ -3,6 +3,8 @@
 #include "Segment.h"
 #include "Rectangle.h"
 #include "Circle.h"
+#include "Arc.h"
+#include "Ellipse.h"
 
 #include <QtMath>
 #include <algorithm>
@@ -64,10 +66,22 @@ double Dimension::measuredValue() const
         if (m_a.object && m_a.object->getType() == PrimitiveType::Circle) {
             return static_cast<const Circle*>(m_a.object)->getRadius();
         }
+        if (m_a.object && m_a.object->getType() == PrimitiveType::Arc) {
+            return static_cast<const Arc*>(m_a.object)->getRadius();
+        }
+        if (m_a.object && m_a.object->getType() == PrimitiveType::Ellipse) {
+            return MathUtils::dist(a, b);
+        }
         return MathUtils::dist(a, b);
     case DimensionType::Diameter:
         if (m_a.object && m_a.object->getType() == PrimitiveType::Circle) {
             return static_cast<const Circle*>(m_a.object)->getRadius() * 2.0;
+        }
+        if (m_a.object && m_a.object->getType() == PrimitiveType::Arc) {
+            return static_cast<const Arc*>(m_a.object)->getRadius() * 2.0;
+        }
+        if (m_a.object && m_a.object->getType() == PrimitiveType::Ellipse) {
+            return MathUtils::dist(a, b) * 2.0;
         }
         return MathUtils::dist(a, b) * 2.0;
     case DimensionType::Angular: {
@@ -342,6 +356,22 @@ bool Dimension::applyMeasuredValue(double newValue)
     if ((m_type == DimensionType::Radius || m_type == DimensionType::Diameter) && m_a.object && m_a.object->getType() == PrimitiveType::Circle) {
         auto* c = const_cast<Circle*>(static_cast<const Circle*>(m_a.object));
         c->setRadius(m_type == DimensionType::Diameter ? newValue / 2.0 : newValue);
+        return true;
+    }
+    if ((m_type == DimensionType::Radius || m_type == DimensionType::Diameter) && m_a.object && m_a.object->getType() == PrimitiveType::Arc) {
+        auto* a = const_cast<Arc*>(static_cast<const Arc*>(m_a.object));
+        a->setRadius(m_type == DimensionType::Diameter ? newValue / 2.0 : newValue);
+        return true;
+    }
+    if ((m_type == DimensionType::Radius || m_type == DimensionType::Diameter) && m_a.object && m_a.object->getType() == PrimitiveType::Ellipse) {
+        auto* e = const_cast<Ellipse*>(static_cast<const Ellipse*>(m_a.object));
+        Point center = e->getCenter();
+        Point edge = m_b.resolve();
+        const double dx = std::abs(edge.getX() - center.getX());
+        const double dy = std::abs(edge.getY() - center.getY());
+        double r = m_type == DimensionType::Diameter ? newValue / 2.0 : newValue;
+        if (dx >= dy) e->setRadiusX(r);
+        else e->setRadiusY(r);
         return true;
     }
     return false;

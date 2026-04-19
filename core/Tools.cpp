@@ -837,6 +837,27 @@ static Point fartherFrom(const Point& origin, const std::pair<Point, Point>& edg
 void CreateDimensionTool::onMousePress(const Point& worldPos, const Snapper& snapper, double scale)
 {
     if (m_type == DimensionType::Angular) {
+        auto picked = makeAnchor(worldPos, snapper, scale);
+        if (picked.object && picked.object->getType() == PrimitiveType::Arc) {
+            auto* arc = static_cast<const Arc*>(picked.object);
+            double start = arc->getStartAngle() * M_PI / 180.0;
+            double end = (arc->getStartAngle() + arc->getSpanAngle()) * M_PI / 180.0;
+            DimensionAnchor a;
+            a.object = picked.object;
+            a.snapIndex = 1;
+            a.fallback = Point(arc->getCenter().getX() + arc->getRadius() * std::cos(start),
+                               arc->getCenter().getY() + arc->getRadius() * std::sin(start));
+            DimensionAnchor b;
+            b.object = picked.object;
+            b.snapIndex = 2;
+            b.fallback = Point(arc->getCenter().getX() + arc->getRadius() * std::cos(end),
+                               arc->getCenter().getY() + arc->getRadius() * std::sin(end));
+            auto dim = std::make_unique<Dimension>(m_type, a, b, arc->getCenter());
+            dim->setAngularRadius(std::max(5.0, arc->getRadius() * 0.65));
+            m_result = std::move(dim);
+            m_finished = true;
+            return;
+        }
         if (m_hoverEdge && m_dimensionEdges.size() < 2) {
             m_dimensionEdges.push_back(*m_hoverEdge);
             return;
@@ -882,6 +903,39 @@ void CreateDimensionTool::onMousePress(const Point& worldPos, const Snapper& sna
                 center.snapIndex = 0;
                 edge.fallback = picked.fallback;
                 edge.snapIndex = -1;
+                Point dir(edge.fallback.getX() - center.fallback.getX(), edge.fallback.getY() - center.fallback.getY());
+                double len = std::max(MathUtils::dist(center.fallback, edge.fallback), 1.0);
+                Point linePoint(center.fallback.getX() + dir.getX() / len * c->getRadius() * 1.25,
+                                center.fallback.getY() + dir.getY() / len * c->getRadius() * 1.25);
+                m_result = std::make_unique<Dimension>(m_type, center, edge, linePoint);
+                m_finished = true;
+                return;
+            } else if (picked.object && picked.object->getType() == PrimitiveType::Arc) {
+                auto* a = static_cast<const Arc*>(picked.object);
+                center.fallback = a->getCenter();
+                center.snapIndex = 0;
+                edge.fallback = picked.fallback;
+                edge.snapIndex = -1;
+                Point dir(edge.fallback.getX() - center.fallback.getX(), edge.fallback.getY() - center.fallback.getY());
+                double len = std::max(MathUtils::dist(center.fallback, edge.fallback), 1.0);
+                Point linePoint(center.fallback.getX() + dir.getX() / len * a->getRadius() * 1.25,
+                                center.fallback.getY() + dir.getY() / len * a->getRadius() * 1.25);
+                m_result = std::make_unique<Dimension>(m_type, center, edge, linePoint);
+                m_finished = true;
+                return;
+            } else if (picked.object && picked.object->getType() == PrimitiveType::Ellipse) {
+                auto* e = static_cast<const Ellipse*>(picked.object);
+                center.fallback = e->getCenter();
+                center.snapIndex = 0;
+                edge.fallback = picked.fallback;
+                edge.snapIndex = -1;
+                Point dir(edge.fallback.getX() - center.fallback.getX(), edge.fallback.getY() - center.fallback.getY());
+                double len = std::max(MathUtils::dist(center.fallback, edge.fallback), 1.0);
+                Point linePoint(center.fallback.getX() + dir.getX() * 1.25,
+                                center.fallback.getY() + dir.getY() * 1.25);
+                m_result = std::make_unique<Dimension>(m_type, center, edge, linePoint);
+                m_finished = true;
+                return;
             }
             m_anchors.push_back(center);
             m_anchors.push_back(edge);
@@ -910,9 +964,14 @@ void CreateDimensionTool::onMouseMove(const Point& worldPos, const Snapper& snap
     m_snapPoint = m_cursorPos;
     m_isSnapped = res.snapped;
     m_hoverEdge.reset();
+    m_hoverCurveObject = nullptr;
     if ((m_type == DimensionType::Horizontal || m_type == DimensionType::Vertical || m_type == DimensionType::Linear || m_type == DimensionType::Angular)
         && res.object && res.object->getType() != PrimitiveType::Dimension) {
         m_hoverEdge = nearestDimensionEdge(res.object, m_cursorPos);
+    }
+    if ((m_type == DimensionType::Radius || m_type == DimensionType::Diameter || m_type == DimensionType::Angular)
+        && res.object && (res.object->getType() == PrimitiveType::Circle || res.object->getType() == PrimitiveType::Arc || res.object->getType() == PrimitiveType::Ellipse)) {
+        m_hoverCurveObject = res.object;
     }
 }
 
@@ -927,6 +986,22 @@ void CreateDimensionTool::draw(QPainter& painter, double scale)
         painter.setPen(edgePen);
         painter.drawLine(QPointF(m_hoverEdge->first.getX(), m_hoverEdge->first.getY()),
                          QPointF(m_hoverEdge->second.getX(), m_hoverEdge->second.getY()));
+        painter.setPen(pen);
+    }
+    if (m_hoverCurveObject) {
+        QPen curvePen(QColor("#66D9EF"), 2.0 / scale);
+        painter.setPen(curvePen);
+        if (m_hoverCurveObject->getType() == PrimitiveType::Circle) {
+            auto* c = static_cast<const Circle*>(m_hoverCurveObject);
+            painter.drawEllipse(QPointF(c->getCenter().getX(), c->getCenter().getY()), c->getRadius(), c->getRadius());
+        } else if (m_hoverCurveObject->getType() == PrimitiveType::Ellipse) {
+            auto* e = static_cast<const Ellipse*>(m_hoverCurveObject);
+            painter.drawEllipse(QPointF(e->getCenter().getX(), e->getCenter().getY()), e->getRadiusX(), e->getRadiusY());
+        } else if (m_hoverCurveObject->getType() == PrimitiveType::Arc) {
+            auto* a = static_cast<const Arc*>(m_hoverCurveObject);
+            QRectF rect(a->getCenter().getX() - a->getRadius(), a->getCenter().getY() - a->getRadius(), a->getRadius() * 2.0, a->getRadius() * 2.0);
+            painter.drawArc(rect, int(-a->getStartAngle() * 16.0), int(-a->getSpanAngle() * 16.0));
+        }
         painter.setPen(pen);
     }
 
@@ -1015,5 +1090,6 @@ void CreateDimensionTool::reset() {
     m_anchors.clear();
     m_dimensionEdges.clear();
     m_hoverEdge.reset();
+    m_hoverCurveObject = nullptr;
     m_result.reset();
 }

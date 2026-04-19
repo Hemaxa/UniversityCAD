@@ -182,4 +182,5 @@ private:
     std::unique_ptr<Object> m_result;
     std::optional<std::pair<Point, Point>> m_hoverEdge;
     std::vector<std::pair<Point, Point>> m_dimensionEdges;
+    const Object* m_hoverCurveObject = nullptr;
 };

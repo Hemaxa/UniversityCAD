@@ -26,6 +26,7 @@
 #include <QRubberBand>
 #include <QInputDialog>
 #include <limits>
+#include <algorithm>
 
 Viewport::Viewport(QWidget *parent) : QWidget(parent)
 {
@@ -208,6 +209,22 @@ void Viewport::mousePressEvent(QMouseEvent *event) {
             if (getGizmoRect().contains(event->pos())) { m_camera->rotateLeft(); return; }
 
             if (m_scene) {
+                const double textHit = 30.0 / m_camera->getZoomFactor();
+                const auto& primitives = m_scene->getPrimitives();
+                for (auto it = primitives.rbegin(); it != primitives.rend(); ++it) {
+                    if ((*it)->getType() != PrimitiveType::Dimension) continue;
+                    auto* dim = static_cast<Dimension*>(it->get());
+                    if (MathUtils::dist(worldP, dim->getTextPosition()) <= textHit) {
+                        m_draggingDimensionText = dim;
+                        m_selectedObjects = {dim};
+                        emit selectionChanged(m_selectedObjects);
+                        update();
+                        return;
+                    }
+                }
+            }
+
+            if (m_scene) {
                 const auto& primitives = m_scene->getPrimitives();
                 for (auto it = primitives.rbegin(); it != primitives.rend(); ++it) {
                     if ((*it)->getType() != PrimitiveType::Dimension) continue;
@@ -233,7 +250,15 @@ void Viewport::mousePressEvent(QMouseEvent *event) {
                     }
                 }
                 // Выделяем объект для редактирования только если клик попал по нему
-                m_selectedObjects = {clickedObject};
+                if (event->modifiers() & Qt::ControlModifier) {
+                    m_selectedObjects.erase(std::remove(m_selectedObjects.begin(), m_selectedObjects.end(), clickedObject), m_selectedObjects.end());
+                } else if (event->modifiers() & Qt::ShiftModifier) {
+                    if (std::find(m_selectedObjects.begin(), m_selectedObjects.end(), clickedObject) == m_selectedObjects.end()) {
+                        m_selectedObjects.push_back(clickedObject);
+                    }
+                } else {
+                    m_selectedObjects = {clickedObject};
+                }
                 emit selectionChanged(m_selectedObjects);
                 update();
                 return;
@@ -300,6 +325,8 @@ void Viewport::mouseMoveEvent(QMouseEvent *event) {
             m_draggingDimensionGrip->setFirstAnchor(anchor);
         } else if (m_dimensionGripIndex == 1) {
             m_draggingDimensionGrip->setSecondAnchor(anchor);
+        } else if (m_draggingDimensionGrip->getDimensionType() == DimensionType::Angular) {
+            m_draggingDimensionGrip->setAngularRadius(std::max(5.0, MathUtils::dist(m_draggingDimensionGrip->getLinePoint(), target)));
         } else {
             m_draggingDimensionGrip->setLinePoint(target);
         }
@@ -316,7 +343,19 @@ void Viewport::mouseReleaseEvent(QMouseEvent *event) {
         m_isSelecting = false; m_rubberBand->hide();
         QRect selectionRect = m_rubberBand->geometry();
         std::vector<Object*> picked = pickObjects(selectionRect);
-        m_selectedObjects = picked;
+        if (event->modifiers() & Qt::ControlModifier) {
+            for (auto* obj : picked) {
+                m_selectedObjects.erase(std::remove(m_selectedObjects.begin(), m_selectedObjects.end(), obj), m_selectedObjects.end());
+            }
+        } else if (event->modifiers() & Qt::ShiftModifier) {
+            for (auto* obj : picked) {
+                if (std::find(m_selectedObjects.begin(), m_selectedObjects.end(), obj) == m_selectedObjects.end()) {
+                    m_selectedObjects.push_back(obj);
+                }
+            }
+        } else {
+            m_selectedObjects = picked;
+        }
         emit selectionChanged(m_selectedObjects);
         update();
     } else if (event->button() == Qt::MiddleButton) {
@@ -488,6 +527,11 @@ std::vector<Object*> Viewport::pickObjects(const QRect& screenRect) {
         case PrimitiveType::Point: {
             auto* pt = static_cast<PointObject*>(obj.get());
             if (check(pt->getPosition())) inside = true;
+            break;
+        }
+        case PrimitiveType::Dimension: {
+            auto* d = static_cast<Dimension*>(obj.get());
+            if (check(d->firstAnchor().resolve()) && check(d->secondAnchor().resolve()) && check(d->getLineGripPosition())) inside = true;
             break;
         }
         default: break;
