@@ -64,6 +64,10 @@ public:
         double origR = 0;              // Радиус (для Circle)
         double origRX = 0, origRY = 0; // Радиусы (для Ellipse)
         double origStartAngle = 0, origSpanAngle = 0; // Углы (для Arc)
+
+        // XData: параметры размеров UniversityCAD.
+        QString dimensionData;
+        bool dimensionVisualEntity = false;
     };
     
     // Извлечение общих свойств из набора пар

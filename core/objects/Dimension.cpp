@@ -5,6 +5,7 @@
 #include "Circle.h"
 #include "Arc.h"
 #include "Ellipse.h"
+#include "Polygon.h"
 
 #include <QtMath>
 #include <algorithm>
@@ -291,18 +292,20 @@ void Dimension::setTextPosition(const Point& p)
     }
 }
 
-static void setSegmentLength(const DimensionAnchor& a, const DimensionAnchor& b, double value)
+static bool setSegmentLength(const DimensionAnchor& a, const DimensionAnchor& b, double value)
 {
-    if (!a.object || a.object != b.object || a.object->getType() != PrimitiveType::Segment) return;
+    if (!a.object || a.object != b.object || a.object->getType() != PrimitiveType::Segment) return false;
+    if ((a.snapIndex != 0 && a.snapIndex != 1) || (b.snapIndex != 0 && b.snapIndex != 1)) return false;
     auto* s = const_cast<Segment*>(static_cast<const Segment*>(a.object));
     Point p1 = a.snapIndex == 0 ? s->getStart() : s->getEnd();
     Point p2 = a.snapIndex == 0 ? s->getEnd() : s->getStart();
     const double len = MathUtils::dist(p1, p2);
-    if (len < MathUtils::EPSILON) return;
+    if (len < MathUtils::EPSILON) return false;
     Point moved(p1.getX() + (p2.getX() - p1.getX()) / len * value,
                 p1.getY() + (p2.getY() - p1.getY()) / len * value);
     if (a.snapIndex == 0) s->setEnd(moved);
     else s->setStart(moved);
+    return true;
 }
 
 static void updateRectangleAnchorFallback(DimensionAnchor& anchor,
@@ -317,12 +320,56 @@ static void updateRectangleAnchorFallback(DimensionAnchor& anchor,
     anchor.fallback = Point(x, y);
 }
 
+static bool sameObject(const DimensionAnchor& a, const DimensionAnchor& b, PrimitiveType type)
+{
+    return a.object && a.object == b.object && a.object->getType() == type;
+}
+
+static int signedDirection(double delta)
+{
+    return delta < 0.0 ? -1 : 1;
+}
+
+static bool setProjectedSegmentSize(const DimensionAnchor& a, const DimensionAnchor& b, double value, bool horizontal)
+{
+    if (!sameObject(a, b, PrimitiveType::Segment)) return false;
+    if ((a.snapIndex != 0 && a.snapIndex != 1) || (b.snapIndex != 0 && b.snapIndex != 1)) return false;
+    auto* s = const_cast<Segment*>(static_cast<const Segment*>(a.object));
+    Point fixed = a.snapIndex == 0 ? s->getStart() : s->getEnd();
+    Point moved = a.snapIndex == 0 ? s->getEnd() : s->getStart();
+    if (horizontal) {
+        const int sign = signedDirection(moved.getX() - fixed.getX());
+        moved.setX(fixed.getX() + sign * value);
+    } else {
+        const int sign = signedDirection(moved.getY() - fixed.getY());
+        moved.setY(fixed.getY() + sign * value);
+    }
+    if (a.snapIndex == 0) s->setEnd(moved);
+    else s->setStart(moved);
+    return true;
+}
+
+static bool pointsFormAxisDiameter(const Point& a, const Point& b, const Point& center, bool horizontal)
+{
+    const double eps = 1e-4;
+    if (horizontal) {
+        return std::abs(a.getY() - center.getY()) < eps
+            && std::abs(b.getY() - center.getY()) < eps
+            && (a.getX() - center.getX()) * (b.getX() - center.getX()) <= 0.0;
+    }
+    return std::abs(a.getX() - center.getX()) < eps
+        && std::abs(b.getX() - center.getX()) < eps
+        && (a.getY() - center.getY()) * (b.getY() - center.getY()) <= 0.0;
+}
+
 bool Dimension::applyMeasuredValue(double newValue)
 {
     if (newValue <= 0) return false;
     if (m_type == DimensionType::Linear && m_a.object == m_b.object && m_a.object && m_a.object->getType() == PrimitiveType::Segment) {
-        setSegmentLength(m_a, m_b, newValue);
-        return true;
+        return setSegmentLength(m_a, m_b, newValue);
+    }
+    if ((m_type == DimensionType::Horizontal || m_type == DimensionType::Vertical) && sameObject(m_a, m_b, PrimitiveType::Segment)) {
+        return setProjectedSegmentSize(m_a, m_b, newValue, m_type == DimensionType::Horizontal);
     }
     if (m_type == DimensionType::Linear && m_a.object == m_b.object && m_a.object && m_a.object->getType() == PrimitiveType::Rectangle) {
         auto* r = const_cast<Rectangle*>(static_cast<const Rectangle*>(m_a.object));
@@ -353,6 +400,43 @@ bool Dimension::applyMeasuredValue(double newValue)
         updateRectangleAnchorFallback(m_b, oldX, oldY, oldW, oldH, r->getWidth(), r->getHeight());
         return true;
     }
+    if ((m_type == DimensionType::Horizontal || m_type == DimensionType::Vertical) && sameObject(m_a, m_b, PrimitiveType::Circle)) {
+        auto* c = const_cast<Circle*>(static_cast<const Circle*>(m_a.object));
+        c->setRadius(newValue / 2.0);
+        return true;
+    }
+    if ((m_type == DimensionType::Horizontal || m_type == DimensionType::Vertical) && sameObject(m_a, m_b, PrimitiveType::Ellipse)) {
+        auto* e = const_cast<Ellipse*>(static_cast<const Ellipse*>(m_a.object));
+        if (m_type == DimensionType::Horizontal) e->setRadiusX(newValue / 2.0);
+        else e->setRadiusY(newValue / 2.0);
+        return true;
+    }
+    if (m_type == DimensionType::Linear && sameObject(m_a, m_b, PrimitiveType::Circle)) {
+        auto* c = const_cast<Circle*>(static_cast<const Circle*>(m_a.object));
+        Point a = m_a.resolve();
+        Point b = m_b.resolve();
+        const Point center = c->getCenter();
+        const bool horizontalDiameter = pointsFormAxisDiameter(a, b, center, true);
+        const bool verticalDiameter = pointsFormAxisDiameter(a, b, center, false);
+        if (horizontalDiameter || verticalDiameter) {
+            c->setRadius(newValue / 2.0);
+            return true;
+        }
+    }
+    if (m_type == DimensionType::Linear && sameObject(m_a, m_b, PrimitiveType::Ellipse)) {
+        auto* e = const_cast<Ellipse*>(static_cast<const Ellipse*>(m_a.object));
+        Point a = m_a.resolve();
+        Point b = m_b.resolve();
+        const Point center = e->getCenter();
+        if (pointsFormAxisDiameter(a, b, center, true)) {
+            e->setRadiusX(newValue / 2.0);
+            return true;
+        }
+        if (pointsFormAxisDiameter(a, b, center, false)) {
+            e->setRadiusY(newValue / 2.0);
+            return true;
+        }
+    }
     if ((m_type == DimensionType::Radius || m_type == DimensionType::Diameter) && m_a.object && m_a.object->getType() == PrimitiveType::Circle) {
         auto* c = const_cast<Circle*>(static_cast<const Circle*>(m_a.object));
         c->setRadius(m_type == DimensionType::Diameter ? newValue / 2.0 : newValue);
@@ -373,6 +457,33 @@ bool Dimension::applyMeasuredValue(double newValue)
         if (dx >= dy) e->setRadiusX(r);
         else e->setRadiusY(r);
         return true;
+    }
+    if ((m_type == DimensionType::Radius || m_type == DimensionType::Diameter) && m_a.object && m_a.object->getType() == PrimitiveType::Polygon) {
+        auto* p = const_cast<PolygonObj*>(static_cast<const PolygonObj*>(m_a.object));
+        p->setRadius(m_type == DimensionType::Diameter ? newValue / 2.0 : newValue);
+        return true;
+    }
+    if ((m_type == DimensionType::Linear || m_type == DimensionType::Horizontal || m_type == DimensionType::Vertical)
+        && sameObject(m_a, m_b, PrimitiveType::Polygon)) {
+        auto* p = const_cast<PolygonObj*>(static_cast<const PolygonObj*>(m_a.object));
+        const double current = measuredValue();
+        if (current > MathUtils::EPSILON) {
+            p->setRadius(p->getRadius() * (newValue / current));
+            return true;
+        }
+    }
+    if (m_type == DimensionType::Angular) {
+        const Object* base = nullptr;
+        if (m_a.object && m_a.object == m_b.object) base = m_a.object;
+        else if (m_a.object && m_a.object->getType() == PrimitiveType::Arc) base = m_a.object;
+        else if (m_b.object && m_b.object->getType() == PrimitiveType::Arc) base = m_b.object;
+
+        if (base && base->getType() == PrimitiveType::Arc) {
+            auto* arc = const_cast<Arc*>(static_cast<const Arc*>(base));
+            const double sign = arc->getSpanAngle() < 0.0 ? -1.0 : 1.0;
+            arc->setSpanAngle(sign * std::min(newValue, 360.0));
+            return true;
+        }
     }
     return false;
 }

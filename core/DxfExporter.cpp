@@ -10,6 +10,7 @@
 #include "Polygon.h"
 #include "Spline.h"
 #include "PointObject.h"
+#include "Dimension.h"
 #include "GlobalSettings.h"
 #include "Enums.h"
 
@@ -17,7 +18,10 @@
 #include <QTextStream>
 #include <QColor>
 #include <QLocale>
+#include <QPointF>
 #include <QSet>
+#include <QStringList>
+#include <QUrl>
 #include <cmath>
 #include <vector>
 #include <algorithm>
@@ -109,6 +113,14 @@ static int getDxfLineWeight(const Object* obj) {
 
 static bool isSpecialLineType(LineStyleType type) {
     return type == LineStyleType::SolidWavy || type == LineStyleType::SolidZigZag;
+}
+
+static QString encodeDimString(const QString& value) {
+    return QString::fromLatin1(QUrl::toPercentEncoding(value));
+}
+
+static QString colorToDimToken(const QColor& color) {
+    return color.name(QColor::HexRgb);
 }
 
 // ============================================================
@@ -866,6 +878,254 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
                 writeCode(20, pt->getPosition().getY());
                 writeCode(30, 0.0);
                 writeXData();
+                break;
+            }
+            case PrimitiveType::Dimension: {
+                auto* dim = static_cast<Dimension*>(obj);
+                const Point a = dim->firstAnchor().resolve();
+                const Point b = dim->secondAnchor().resolve();
+                const Point line = dim->getLinePoint();
+
+                auto normalizedPoint = [](const QPointF& v) {
+                    const double len = std::hypot(v.x(), v.y());
+                    if (len < 1e-9) return QPointF(1.0, 0.0);
+                    return QPointF(v.x() / len, v.y() / len);
+                };
+
+                auto writeDimEntityCommon = [&](const QString& subclassMarker, const QColor& color, const LineStyle& style) {
+                    writeCode(5, nextHandle());
+                    writeCode(100, "AcDbEntity");
+                    writeCode(8, obj->getLayer());
+                    writeCode(6, getDxfLinetype(static_cast<int>(style.type)));
+                    writeCode(62, getAutoCadColorIndex(color));
+                    writeCode(420, getTrueColor24Bit(color));
+                    writeCode(370, 13);
+                    writeCode(999, "UNIVERSITYCAD_DIM_GEOM");
+                    writeCode(100, subclassMarker);
+                };
+
+                auto writeDimLine = [&](const QPointF& p1, const QPointF& p2, const QColor& color, const LineStyle& style) {
+                    writeCode(0, "LINE");
+                    writeDimEntityCommon("AcDbLine", color, style);
+                    writeCode(10, p1.x());
+                    writeCode(20, p1.y());
+                    writeCode(30, 0.0);
+                    writeCode(11, p2.x());
+                    writeCode(21, p2.y());
+                    writeCode(31, 0.0);
+                };
+
+                auto writeDimCircle = [&](const QPointF& center, double radius, const QColor& color, const LineStyle& style) {
+                    writeCode(0, "CIRCLE");
+                    writeDimEntityCommon("AcDbCircle", color, style);
+                    writeCode(10, center.x());
+                    writeCode(20, center.y());
+                    writeCode(30, 0.0);
+                    writeCode(40, radius);
+                };
+
+                auto writeDimArc = [&](const QPointF& center, double radius, double startRad, double deltaRad, const QColor& color, const LineStyle& style) {
+                    double startDeg = qRadiansToDegrees(startRad);
+                    double endDeg = qRadiansToDegrees(startRad + deltaRad);
+                    if (deltaRad < 0.0) std::swap(startDeg, endDeg);
+                    writeCode(0, "ARC");
+                    writeDimEntityCommon("AcDbCircle", color, style);
+                    writeCode(10, center.x());
+                    writeCode(20, center.y());
+                    writeCode(30, 0.0);
+                    writeCode(40, radius);
+                    writeCode(100, "AcDbArc");
+                    writeCode(50, startDeg);
+                    writeCode(51, endDeg);
+                };
+
+                auto writeDimText = [&](const QPointF& pos, double angleDeg) {
+                    while (angleDeg > 180.0) angleDeg -= 360.0;
+                    while (angleDeg < -180.0) angleDeg += 360.0;
+                    if (angleDeg > 90.0) angleDeg -= 180.0;
+                    if (angleDeg < -90.0) angleDeg += 180.0;
+                    writeCode(0, "TEXT");
+                    writeDimEntityCommon("AcDbText", dim->textColor(), dim->dimensionLineStyle());
+                    writeCode(10, pos.x());
+                    writeCode(20, pos.y());
+                    writeCode(30, 0.0);
+                    writeCode(40, dim->textHeight());
+                    writeCode(1, dim->displayText());
+                    writeCode(50, angleDeg);
+                    writeCode(7, "STANDARD");
+                    writeCode(72, 1);
+                    writeCode(11, pos.x());
+                    writeCode(21, pos.y());
+                    writeCode(31, 0.0);
+                    writeCode(73, 2);
+                };
+
+                auto writeArrow = [&](const QPointF& tip, double angle) {
+                    const double size = std::max(1.0, dim->arrowSize());
+                    const QPointF back(tip.x() - std::cos(angle) * size, tip.y() - std::sin(angle) * size);
+                    const QPointF left(back.x() + std::cos(angle + M_PI / 2.0) * size * 0.35,
+                                       back.y() + std::sin(angle + M_PI / 2.0) * size * 0.35);
+                    const QPointF right(back.x() + std::cos(angle - M_PI / 2.0) * size * 0.35,
+                                        back.y() + std::sin(angle - M_PI / 2.0) * size * 0.35);
+                    if (dim->arrowType() == ArrowType::Dot) {
+                        writeDimCircle(tip, size * 0.25, dim->dimensionColor(), dim->dimensionLineStyle());
+                    } else if (dim->arrowType() == ArrowType::Tick) {
+                        writeDimLine(QPointF(tip.x() - size * 0.35, tip.y() - size * 0.35),
+                                     QPointF(tip.x() + size * 0.35, tip.y() + size * 0.35),
+                                     dim->dimensionColor(), dim->dimensionLineStyle());
+                    } else {
+                        writeDimLine(tip, left, dim->dimensionColor(), dim->dimensionLineStyle());
+                        writeDimLine(tip, right, dim->dimensionColor(), dim->dimensionLineStyle());
+                        if (dim->arrowType() == ArrowType::Closed) {
+                            writeDimLine(left, right, dim->dimensionColor(), dim->dimensionLineStyle());
+                        }
+                    }
+                };
+
+                auto writeVisibleDimension = [&]() {
+                    const QPointF ap(a.getX(), a.getY());
+                    const QPointF bp(b.getX(), b.getY());
+                    const QPointF lp(line.getX(), line.getY());
+                    const QPointF text(dim->getTextPosition().getX(), dim->getTextPosition().getY());
+
+                    if (dim->getDimensionType() == DimensionType::Radius || dim->getDimensionType() == DimensionType::Diameter) {
+                        double r = dim->measuredValue();
+                        if (dim->getDimensionType() == DimensionType::Diameter) r *= 0.5;
+                        QPointF dir = normalizedPoint(lp - ap);
+                        if (std::hypot(lp.x() - ap.x(), lp.y() - ap.y()) < 1e-9) {
+                            dir = normalizedPoint(bp - ap);
+                        }
+                        const QPointF edge1 = ap + dir * r;
+                        const QPointF edge2 = ap - dir * r;
+                        if (dim->getDimensionType() == DimensionType::Radius) {
+                            QPointF leaderEnd = lp;
+                            if (std::hypot(leaderEnd.x() - ap.x(), leaderEnd.y() - ap.y()) < r) leaderEnd = edge1;
+                            writeDimLine(ap, leaderEnd, dim->dimensionColor(), dim->dimensionLineStyle());
+                            double arrowAngle = std::atan2(ap.y() - edge1.y(), ap.x() - edge1.x());
+                            if (dim->arrowPlacement() == ArrowPlacement::Inside) arrowAngle += M_PI;
+                            writeArrow(edge1, arrowAngle);
+                            writeDimText(text, qRadiansToDegrees(std::atan2(leaderEnd.y() - ap.y(), leaderEnd.x() - ap.x())));
+                        } else {
+                            writeDimLine(edge2, edge1, dim->dimensionColor(), dim->dimensionLineStyle());
+                            const bool outside = dim->arrowPlacement() == ArrowPlacement::Inside;
+                            writeArrow(edge2, std::atan2(edge1.y() - edge2.y(), edge1.x() - edge2.x()) + (outside ? M_PI : 0.0));
+                            writeArrow(edge1, std::atan2(edge2.y() - edge1.y(), edge2.x() - edge1.x()) + (outside ? M_PI : 0.0));
+                            writeDimText(text, qRadiansToDegrees(std::atan2(edge1.y() - edge2.y(), edge1.x() - edge2.x())));
+                        }
+                        return;
+                    }
+
+                    if (dim->getDimensionType() == DimensionType::Angular) {
+                        const double a1 = std::atan2(ap.y() - lp.y(), ap.x() - lp.x());
+                        const double a2 = std::atan2(bp.y() - lp.y(), bp.x() - lp.x());
+                        double delta = std::fmod(a2 - a1, 2.0 * M_PI);
+                        if (delta > M_PI) delta -= 2.0 * M_PI;
+                        if (delta < -M_PI) delta += 2.0 * M_PI;
+                        const double r = dim->angularRadius() > 1e-9
+                            ? dim->angularRadius()
+                            : std::max(15.0, std::min(std::hypot(ap.x() - lp.x(), ap.y() - lp.y()),
+                                                      std::hypot(bp.x() - lp.x(), bp.y() - lp.y())) * 0.65);
+                        const QPointF arcA(lp.x() + std::cos(a1) * r, lp.y() + std::sin(a1) * r);
+                        const QPointF arcB(lp.x() + std::cos(a1 + delta) * r, lp.y() + std::sin(a1 + delta) * r);
+                        auto writeAngularExtension = [&](double angle, const QPointF& source) {
+                            QPointF dir(std::cos(angle), std::sin(angle));
+                            double sourceRadius = std::hypot(source.x() - lp.x(), source.y() - lp.y());
+                            double endRadius = r + dim->extensionOvershoot();
+                            if (endRadius < sourceRadius) std::swap(sourceRadius, endRadius);
+                            writeDimLine(QPointF(lp.x() + dir.x() * sourceRadius, lp.y() + dir.y() * sourceRadius),
+                                         QPointF(lp.x() + dir.x() * endRadius, lp.y() + dir.y() * endRadius),
+                                         dim->extensionColor(), dim->extensionLineStyle());
+                        };
+                        writeAngularExtension(a1, ap);
+                        writeAngularExtension(a1 + delta, bp);
+                        writeDimArc(lp, r, a1, delta, dim->dimensionColor(), dim->dimensionLineStyle());
+                        const double tangentSign = delta >= 0.0 ? 1.0 : -1.0;
+                        writeArrow(arcA, a1 + tangentSign * M_PI / 2.0);
+                        writeArrow(arcB, a1 + delta - tangentSign * M_PI / 2.0);
+                        writeDimText(text, qRadiansToDegrees(a1 + delta * dim->textPositionFactor() + tangentSign * M_PI / 2.0));
+                        return;
+                    }
+
+                    QPointF da = ap;
+                    QPointF db = bp;
+                    double textAngle = 0.0;
+                    if (dim->getDimensionType() == DimensionType::Horizontal) {
+                        da = QPointF(ap.x(), lp.y());
+                        db = QPointF(bp.x(), lp.y());
+                    } else if (dim->getDimensionType() == DimensionType::Vertical) {
+                        da = QPointF(lp.x(), ap.y());
+                        db = QPointF(lp.x(), bp.y());
+                        textAngle = 90.0;
+                    } else {
+                        const double vx = bp.x() - ap.x();
+                        const double vy = bp.y() - ap.y();
+                        const double len = std::hypot(vx, vy);
+                        if (len > 1e-9) {
+                            const double nx = -vy / len;
+                            const double ny = vx / len;
+                            const double off = (lp.x() - ap.x()) * nx + (lp.y() - ap.y()) * ny;
+                            da = QPointF(ap.x() + nx * off, ap.y() + ny * off);
+                            db = QPointF(bp.x() + nx * off, bp.y() + ny * off);
+                        }
+                    }
+                    QPointF u = normalizedPoint(db - da);
+                    QPointF n(-u.y(), u.x());
+                    const QPointF dimStart = da - u * dim->dimensionExtension();
+                    const QPointF dimEnd = db + u * dim->dimensionExtension();
+                    auto writeExtension = [&](const QPointF& source, const QPointF& target) {
+                        const QPointF normal = normalizedPoint(n);
+                        const double sign = QPointF::dotProduct(target - source, normal) >= 0.0 ? 1.0 : -1.0;
+                        writeDimLine(source, target + normal * (sign * dim->extensionOvershoot()),
+                                     dim->extensionColor(), dim->extensionLineStyle());
+                    };
+                    writeExtension(ap, da);
+                    writeExtension(bp, db);
+                    writeDimLine(dimStart, dimEnd, dim->dimensionColor(), dim->dimensionLineStyle());
+                    const double angle = std::atan2(db.y() - da.y(), db.x() - da.x());
+                    const bool outside = dim->arrowPlacement() == ArrowPlacement::Inside;
+                    writeArrow(da, angle + (outside ? M_PI : 0.0));
+                    writeArrow(db, angle + M_PI + (outside ? M_PI : 0.0));
+                    if (dim->getDimensionType() != DimensionType::Vertical) {
+                        textAngle = qRadiansToDegrees(angle);
+                    }
+                    writeDimText(text, textAngle);
+                };
+
+                QStringList data;
+                data << "1"
+                     << QString::number(static_cast<int>(dim->getDimensionType()))
+                     << QString::number(a.getX(), 'f', 10)
+                     << QString::number(a.getY(), 'f', 10)
+                     << QString::number(b.getX(), 'f', 10)
+                     << QString::number(b.getY(), 'f', 10)
+                     << QString::number(line.getX(), 'f', 10)
+                     << QString::number(line.getY(), 'f', 10)
+                     << QString::number(dim->textPositionFactor(), 'f', 10)
+                     << encodeDimString(dim->getTextOverride())
+                     << colorToDimToken(dim->extensionColor())
+                     << colorToDimToken(dim->dimensionColor())
+                     << colorToDimToken(dim->textColor())
+                     << QString::number(static_cast<int>(dim->extensionLineStyle().type))
+                     << QString::number(static_cast<int>(dim->dimensionLineStyle().type))
+                     << QString::number(dim->extensionOvershoot(), 'f', 10)
+                     << QString::number(dim->dimensionExtension(), 'f', 10)
+                     << QString::number(static_cast<int>(dim->arrowType()))
+                     << QString::number(static_cast<int>(dim->arrowPlacement()))
+                     << QString::number(dim->arrowSize(), 'f', 10)
+                     << QString::number(dim->arrowFilled() ? 1 : 0)
+                     << encodeDimString(dim->fontFamily())
+                     << QString::number(dim->textHeight(), 'f', 10)
+                     << QString::number(dim->textOffset(), 'f', 10)
+                     << QString::number(dim->angularRadius(), 'f', 10);
+
+                writeCode(0, "POINT");
+                writeCommonProperties("AcDbPoint");
+                writeCode(999, "UNIVERSITYCAD_DIM:" + data.join('|'));
+                writeCode(10, line.getX());
+                writeCode(20, line.getY());
+                writeCode(30, 0.0);
+                writeXData();
+                writeVisibleDimension();
                 break;
             }
             default:

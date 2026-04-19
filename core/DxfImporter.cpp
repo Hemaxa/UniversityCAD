@@ -8,8 +8,10 @@
 #include "Polygon.h"
 #include "Spline.h"
 #include "PointObject.h"
+#include "Dimension.h"
 #include <QFile>
 #include <QTextStream>
+#include <QUrl>
 #include <cmath>
 #include <iostream>
 
@@ -113,6 +115,12 @@ void DxfImporter::extractCommonProps(const std::vector<DxfPair>& pairs, DxfImpor
                     }
                 }
             }
+            else if (val.startsWith("UNIVERSITYCAD_DIM:")) {
+                props.dimensionData = val.mid(val.indexOf(':') + 1);
+            }
+            else if (val == "UNIVERSITYCAD_DIM_GEOM") {
+                props.dimensionVisualEntity = true;
+            }
         }
         else if (code == 10) props.pt10_x = val.toDouble();
         else if (code == 20) props.pt10_y = val.toDouble();
@@ -160,6 +168,8 @@ void DxfImporter::extractCommonProps(const std::vector<DxfPair>& pairs, DxfImpor
         }
     }
 }
+
+static void rebindImportedDimensions(Scene* scene);
 
 bool DxfImporter::importScene(Scene* scene, const QString& filePath) {
     if (!scene) return false;
@@ -319,13 +329,136 @@ bool DxfImporter::importScene(Scene* scene, const QString& filePath) {
             if (obj) scene->addPrimitive(std::move(obj));
         }
     }
+
+    rebindImportedDimensions(scene);
     
     return true;
 }
 
+static QString decodeDimString(const QString& value)
+{
+    return QUrl::fromPercentEncoding(value.toLatin1());
+}
+
+static QColor dimTokenToColor(const QString& value, const QColor& fallback = Qt::white)
+{
+    QColor color(value);
+    return color.isValid() ? color : fallback;
+}
+
+static std::unique_ptr<Object> createDimensionFromData(const QString& packed)
+{
+    const QStringList parts = packed.split('|');
+    if (parts.size() < 25 || parts[0] != "1") return nullptr;
+
+    auto toDouble = [&](int index, double fallback = 0.0) {
+        bool ok = false;
+        const double value = parts[index].toDouble(&ok);
+        return ok ? value : fallback;
+    };
+    auto toInt = [&](int index, int fallback = 0) {
+        bool ok = false;
+        const int value = parts[index].toInt(&ok);
+        return ok ? value : fallback;
+    };
+
+    DimensionAnchor a;
+    DimensionAnchor b;
+    a.fallback = Point(toDouble(2), toDouble(3));
+    b.fallback = Point(toDouble(4), toDouble(5));
+
+    const auto type = static_cast<DimensionType>(toInt(1));
+    auto dim = std::make_unique<Dimension>(type, a, b, Point(toDouble(6), toDouble(7)));
+    dim->setTextPositionFactor(toDouble(8, 0.5));
+    dim->setTextOverride(decodeDimString(parts[9]));
+    dim->setExtensionColor(dimTokenToColor(parts[10]));
+    dim->setDimensionColor(dimTokenToColor(parts[11]));
+    dim->setTextColor(dimTokenToColor(parts[12]));
+
+    LineStyle extensionStyle = dim->extensionLineStyle();
+    extensionStyle.type = static_cast<LineStyleType>(toInt(13, static_cast<int>(extensionStyle.type)));
+    dim->setExtensionLineStyle(extensionStyle);
+
+    LineStyle dimensionStyle = dim->dimensionLineStyle();
+    dimensionStyle.type = static_cast<LineStyleType>(toInt(14, static_cast<int>(dimensionStyle.type)));
+    dim->setDimensionLineStyle(dimensionStyle);
+    dim->setLineStyle(dimensionStyle);
+
+    dim->setExtensionOvershoot(toDouble(15, dim->extensionOvershoot()));
+    dim->setDimensionExtension(toDouble(16, dim->dimensionExtension()));
+    dim->setArrowType(static_cast<ArrowType>(toInt(17, static_cast<int>(dim->arrowType()))));
+    dim->setArrowPlacement(static_cast<ArrowPlacement>(toInt(18, static_cast<int>(dim->arrowPlacement()))));
+    dim->setArrowSize(toDouble(19, dim->arrowSize()));
+    dim->setArrowFilled(toInt(20, dim->arrowFilled() ? 1 : 0) != 0);
+    dim->setFontFamily(decodeDimString(parts[21]));
+    dim->setTextHeight(toDouble(22, dim->textHeight()));
+    dim->setTextOffset(toDouble(23, dim->textOffset()));
+    dim->setAngularRadius(toDouble(24, dim->angularRadius()));
+    dim->setColor(dim->dimensionColor());
+    return dim;
+}
+
+static double pointDistance(const Point& a, const Point& b)
+{
+    return std::hypot(a.getX() - b.getX(), a.getY() - b.getY());
+}
+
+static DimensionAnchor rebindDimensionAnchor(const DimensionAnchor& source, const Scene* scene)
+{
+    constexpr double tolerance = 1e-3;
+    DimensionAnchor best = source;
+    double bestDistance = tolerance;
+
+    for (const auto& candidatePtr : scene->getPrimitives()) {
+        const Object* candidate = candidatePtr.get();
+        if (!candidate || candidate->getType() == PrimitiveType::Dimension) continue;
+
+        const auto snaps = candidate->getSnapPoints();
+        for (int i = 0; i < static_cast<int>(snaps.size()); ++i) {
+            const double d = pointDistance(source.fallback, snaps[i].p);
+            if (d < bestDistance) {
+                bestDistance = d;
+                best.object = candidate;
+                best.snapIndex = snaps[i].index >= 0 ? snaps[i].index : i;
+                best.fallback = snaps[i].p;
+            }
+        }
+
+        const Point closest = candidate->getClosestPoint(source.fallback);
+        const double d = pointDistance(source.fallback, closest);
+        if (d < bestDistance) {
+            bestDistance = d;
+            best.object = candidate;
+            best.snapIndex = -1;
+            best.fallback = closest;
+        }
+    }
+
+    return best;
+}
+
+static void rebindImportedDimensions(Scene* scene)
+{
+    for (const auto& objPtr : scene->getPrimitives()) {
+        if (!objPtr || objPtr->getType() != PrimitiveType::Dimension) continue;
+        auto* dimension = static_cast<Dimension*>(objPtr.get());
+        dimension->setFirstAnchor(rebindDimensionAnchor(dimension->firstAnchor(), scene));
+        dimension->setSecondAnchor(rebindDimensionAnchor(dimension->secondAnchor(), scene));
+    }
+}
+
 std::unique_ptr<Object> DxfImporter::createEntity(const EntityProps& props) {
     std::unique_ptr<Object> obj;
+
+    if (props.dimensionVisualEntity) {
+        return nullptr;
+    }
+
+    if (!props.dimensionData.isEmpty()) {
+        obj = createDimensionFromData(props.dimensionData);
+    }
     
+    if (!obj) {
     if (props.type == "LINE") {
         obj = std::make_unique<Segment>(Point(props.pt10_x, props.pt10_y), Point(props.pt11_x, props.pt11_y));
     } else if (props.type == "CIRCLE") {
@@ -472,6 +605,7 @@ std::unique_ptr<Object> DxfImporter::createEntity(const EntityProps& props) {
         }
     } else if (props.type == "POINT") {
         obj = std::make_unique<PointObject>(Point(props.pt10_x, props.pt10_y));
+    }
     }
     
     if (obj) {
