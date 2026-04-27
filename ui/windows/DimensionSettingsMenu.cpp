@@ -118,8 +118,8 @@ void DimensionSettingsMenu::setupUi()
     auto* arrowGroup = new QGroupBox("Стрелки");
     auto* arrowForm = new QFormLayout(arrowGroup);
     auto* arrowType = new QComboBox();
-    arrowType->addItem(QIcon(":/icons/arrow-closed.svg"), "Закрытая", static_cast<int>(ArrowType::Closed));
-    arrowType->addItem(QIcon(":/icons/arrow-open.svg"), "Открытая", static_cast<int>(ArrowType::Open));
+    arrowType->addItem(QIcon(":/icons/arrow-open.svg"), "Закрытая", static_cast<int>(ArrowType::Closed));
+    arrowType->addItem(QIcon(":/icons/arrow-closed.svg"), "Открытая", static_cast<int>(ArrowType::Open));
     arrowType->addItem(QIcon(":/icons/arrow-tick.svg"), "Засечка", static_cast<int>(ArrowType::Tick));
     arrowType->addItem(QIcon(":/icons/arrow-dot.svg"), "Точка", static_cast<int>(ArrowType::Dot));
     arrowType->setCurrentIndex(arrowType->findData(static_cast<int>(style.arrowType)));

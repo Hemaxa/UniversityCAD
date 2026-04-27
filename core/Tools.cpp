@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <QPen>
 #include <QPainterPath>
+#include <QFontMetricsF>
 
 // Хелпер для обновления привязки с учетом контекста (предыдущей точки)
 void updateSnap(const Point& worldPos, const Snapper& snapper, double scale,
@@ -777,14 +778,84 @@ DimensionAnchor CreateDimensionTool::makeAnchor(const Point& raw, const Snapper&
     return anchor;
 }
 
-static std::optional<std::pair<Point, Point>> nearestDimensionEdge(const Object* obj, const Point& p)
+bool CreateDimensionTool::tryPickRadialAnchors(const Point& worldPos, const Snapper& snapper, double scale)
+{
+    auto picked = makeAnchor(worldPos, snapper, scale);
+    if (!picked.object) {
+        return false;
+    }
+
+    DimensionAnchor center = picked;
+    DimensionAnchor edge = picked;
+    if (picked.object->getType() == PrimitiveType::Circle) {
+        auto* c = static_cast<const Circle*>(picked.object);
+        center.fallback = c->getCenter();
+        center.snapIndex = 0;
+    } else if (picked.object->getType() == PrimitiveType::Arc) {
+        auto* a = static_cast<const Arc*>(picked.object);
+        center.fallback = a->getCenter();
+        center.snapIndex = 0;
+    } else if (picked.object->getType() == PrimitiveType::Ellipse) {
+        auto* e = static_cast<const Ellipse*>(picked.object);
+        center.fallback = e->getCenter();
+        center.snapIndex = 0;
+    } else {
+        return false;
+    }
+
+    edge.fallback = picked.fallback;
+    edge.snapIndex = -1;
+    m_anchors = {center, edge};
+    return true;
+}
+
+void CreateDimensionTool::finishDimensionWithText(const Point& textPos)
+{
+    if (m_anchors.size() < 2 || !m_pendingLinePoint.has_value()) {
+        return;
+    }
+
+    auto dim = std::make_unique<Dimension>(m_type, m_anchors[0], m_anchors[1], *m_pendingLinePoint);
+    if (m_type == DimensionType::Angular) {
+        dim->setAngularRadius(m_pendingAngularRadius.value_or(5.0));
+        dim->setUseSupplementaryAngle(m_pendingSupplementaryAngle);
+    }
+    dim->setTextPosition(textPos);
+    m_result = std::move(dim);
+    m_finished = true;
+}
+
+std::unique_ptr<Dimension> CreateDimensionTool::buildPreviewDimension(const Point& textPos) const
+{
+    if (m_anchors.size() < 2 || !m_pendingLinePoint.has_value()) {
+        return nullptr;
+    }
+
+    auto dim = std::make_unique<Dimension>(m_type, m_anchors[0], m_anchors[1], *m_pendingLinePoint);
+    if (m_type == DimensionType::Angular) {
+        dim->setAngularRadius(m_pendingAngularRadius.value_or(5.0));
+        dim->setUseSupplementaryAngle(m_pendingSupplementaryAngle);
+    }
+    dim->setTextPosition(textPos);
+    return dim;
+}
+
+void CreateDimensionTool::toggleAngularSide()
+{
+    if (m_type != DimensionType::Angular) {
+        return;
+    }
+    m_pendingSupplementaryAngle = !m_pendingSupplementaryAngle;
+}
+
+static std::optional<DimensionEdgeRef> nearestDimensionEdge(const Object* obj, const Point& p)
 {
     if (!obj || obj->getType() == PrimitiveType::Dimension) return std::nullopt;
 
-    std::vector<std::pair<Point, Point>> edges;
+    std::vector<DimensionEdgeRef> edges;
     if (obj->getType() == PrimitiveType::Segment) {
         auto* s = static_cast<const Segment*>(obj);
-        edges.push_back({s->getStart(), s->getEnd()});
+        edges.push_back({s->getStart(), s->getEnd(), obj, 0, 1});
     } else if (obj->getType() == PrimitiveType::Rectangle) {
         auto* r = static_cast<const Rectangle*>(obj);
         double x = r->getTopLeft().getX();
@@ -803,7 +874,7 @@ static std::optional<std::pair<Point, Point>> nearestDimensionEdge(const Object*
 
     if (edges.empty()) return std::nullopt;
     double best = std::numeric_limits<double>::max();
-    std::pair<Point, Point> bestEdge = edges.front();
+    DimensionEdgeRef bestEdge = edges.front();
     for (const auto& edge : edges) {
         Point proj = MathUtils::projectPointOnSegment(p, edge.first, edge.second);
         double d = MathUtils::distSq(p, proj);
@@ -829,19 +900,122 @@ static bool intersectInfiniteLines(const Point& a1, const Point& a2, const Point
     return true;
 }
 
-static Point fartherFrom(const Point& origin, const std::pair<Point, Point>& edge)
+static Point fartherFrom(const Point& origin, const DimensionEdgeRef& edge)
 {
     return MathUtils::distSq(origin, edge.first) > MathUtils::distSq(origin, edge.second) ? edge.first : edge.second;
+}
+
+static DimensionAnchor fartherAnchorFrom(const Point& origin, const DimensionEdgeRef& edge)
+{
+    DimensionAnchor anchor;
+    const bool chooseFirst = MathUtils::distSq(origin, edge.first) > MathUtils::distSq(origin, edge.second);
+    anchor.object = edge.object;
+    anchor.snapIndex = chooseFirst ? edge.firstSnapIndex : edge.secondSnapIndex;
+    anchor.fallback = chooseFirst ? edge.first : edge.second;
+    return anchor;
+}
+
+static void drawPreviewDimensionText(QPainter& painter, const Dimension& dim, double scale)
+{
+    const QPointF textPos(dim.getTextPosition().getX(), dim.getTextPosition().getY());
+    const QTransform worldTransform = painter.transform();
+    painter.save();
+    painter.resetTransform();
+    const QPointF screenPos = worldTransform.map(textPos);
+    QFont font(dim.fontFamily(), std::max(6, static_cast<int>(dim.textHeight())));
+    QFontMetricsF metrics(font);
+    painter.setFont(font);
+    painter.setPen(QPen(QColor("#A6E22E")));
+
+    if (dim.getDimensionType() == DimensionType::Angular) {
+        const QString text = dim.displayText();
+        const QPointF centerScreen = worldTransform.map(QPointF(dim.getLinePoint().getX(), dim.getLinePoint().getY()));
+        const double radiusScreen = std::hypot(screenPos.x() - centerScreen.x(), screenPos.y() - centerScreen.y());
+        if (radiusScreen > 1.0) {
+            Point a = dim.firstAnchor().resolve();
+            Point b = dim.secondAnchor().resolve();
+            const double a1 = std::atan2(a.getY() - dim.getLinePoint().getY(), a.getX() - dim.getLinePoint().getX());
+            const double a2 = std::atan2(b.getY() - dim.getLinePoint().getY(), b.getX() - dim.getLinePoint().getX());
+            double delta = std::fmod(a2 - a1, 2.0 * M_PI);
+            if (delta > M_PI) delta -= 2.0 * M_PI;
+            if (delta < -M_PI) delta += 2.0 * M_PI;
+            if (dim.useSupplementaryAngle() && std::abs(delta) > MathUtils::EPSILON) {
+                delta = delta > 0.0 ? delta - 2.0 * M_PI : delta + 2.0 * M_PI;
+            }
+            const double tangentSign = delta >= 0.0 ? 1.0 : -1.0;
+            const double middleAngleDeg = qRadiansToDegrees(a1 + delta * dim.textPositionFactor());
+            const double totalAdvance = metrics.horizontalAdvance(text);
+            const double anglePerPixel = 180.0 / (M_PI * radiusScreen);
+            double angleCursor = middleAngleDeg - tangentSign * totalAdvance * anglePerPixel * 0.5;
+            for (const QChar ch : text) {
+                const QString glyph(ch);
+                const double advance = metrics.horizontalAdvance(glyph);
+                const double glyphAngle = angleCursor + tangentSign * advance * anglePerPixel * 0.5;
+                const double glyphRad = qDegreesToRadians(glyphAngle);
+                const QPointF pos(centerScreen.x() + std::cos(glyphRad) * radiusScreen,
+                                  centerScreen.y() - std::sin(glyphRad) * radiusScreen);
+                painter.save();
+                painter.translate(pos);
+                painter.rotate(-glyphAngle + (tangentSign >= 0.0 ? -90.0 : 90.0));
+                painter.drawText(QRectF(-advance * 0.5, -metrics.height() * 0.5, advance, metrics.height()), Qt::AlignCenter, glyph);
+                painter.restore();
+                angleCursor += tangentSign * advance * anglePerPixel;
+            }
+            painter.restore();
+            return;
+        }
+    }
+
+    auto screenAngle = [&](const QPointF& worldVector) {
+        QPointF s0 = worldTransform.map(QPointF(0, 0));
+        QPointF s1 = worldTransform.map(worldVector);
+        QPointF sv = s1 - s0;
+        return qRadiansToDegrees(std::atan2(sv.y(), sv.x()));
+    };
+
+    double textAngleDeg = 0.0;
+    if (dim.getDimensionType() == DimensionType::Vertical) {
+        textAngleDeg = -90.0;
+    } else if (dim.getDimensionType() == DimensionType::Horizontal) {
+        textAngleDeg = 0.0;
+    } else if (dim.getDimensionType() == DimensionType::Linear
+               || dim.getDimensionType() == DimensionType::Radius
+               || dim.getDimensionType() == DimensionType::Diameter) {
+        Point a = dim.firstAnchor().resolve();
+        Point b = dim.secondAnchor().resolve();
+        QPointF dir;
+        if (dim.getDimensionType() == DimensionType::Linear) {
+            dir = QPointF(b.getX() - a.getX(), b.getY() - a.getY());
+        } else {
+            dir = QPointF(dim.getLinePoint().getX() - a.getX(), dim.getLinePoint().getY() - a.getY());
+        }
+        textAngleDeg = screenAngle(dir);
+    }
+
+    while (textAngleDeg > 180.0) textAngleDeg -= 360.0;
+    while (textAngleDeg < -180.0) textAngleDeg += 360.0;
+    if (textAngleDeg > 90.0) textAngleDeg -= 180.0;
+    if (textAngleDeg < -90.0) textAngleDeg += 180.0;
+
+    painter.translate(screenPos);
+    painter.rotate(textAngleDeg);
+    painter.drawText(QRectF(-80, -16, 160, 32), Qt::AlignCenter, dim.displayText());
+    painter.restore();
 }
 
 void CreateDimensionTool::onMousePress(const Point& worldPos, const Snapper& snapper, double scale)
 {
     if (m_type == DimensionType::Angular) {
+        if (m_pendingLinePoint.has_value() && m_pendingAngularRadius.has_value()) {
+            finishDimensionWithText(makeAnchor(worldPos, snapper, scale).fallback);
+            return;
+        }
+
         auto picked = makeAnchor(worldPos, snapper, scale);
-        if (picked.object && picked.object->getType() == PrimitiveType::Arc) {
+        if (m_anchors.empty() && m_dimensionEdges.empty() && picked.object && picked.object->getType() == PrimitiveType::Arc) {
             auto* arc = static_cast<const Arc*>(picked.object);
-            double start = arc->getStartAngle() * M_PI / 180.0;
-            double end = (arc->getStartAngle() + arc->getSpanAngle()) * M_PI / 180.0;
+            const double start = arc->getStartAngle() * M_PI / 180.0;
+            const double end = (arc->getStartAngle() + arc->getSpanAngle()) * M_PI / 180.0;
             DimensionAnchor a;
             a.object = picked.object;
             a.snapIndex = 1;
@@ -852,17 +1026,17 @@ void CreateDimensionTool::onMousePress(const Point& worldPos, const Snapper& sna
             b.snapIndex = 2;
             b.fallback = Point(arc->getCenter().getX() + arc->getRadius() * std::cos(end),
                                arc->getCenter().getY() + arc->getRadius() * std::sin(end));
-            auto dim = std::make_unique<Dimension>(m_type, a, b, arc->getCenter());
-            dim->setAngularRadius(std::max(5.0, arc->getRadius() * 0.65));
-            m_result = std::move(dim);
-            m_finished = true;
+            m_anchors = {a, b};
+            m_pendingLinePoint = arc->getCenter();
             return;
         }
-        if (m_hoverEdge && m_dimensionEdges.size() < 2) {
+
+        if (m_hoverEdge && m_dimensionEdges.size() < 2 && !m_pendingLinePoint.has_value()) {
             m_dimensionEdges.push_back(*m_hoverEdge);
             return;
         }
-        if (m_dimensionEdges.size() == 2) {
+
+        if (m_dimensionEdges.size() == 2 && !m_pendingLinePoint.has_value()) {
             Point vertex;
             if (!intersectInfiniteLines(m_dimensionEdges[0].first, m_dimensionEdges[0].second,
                                         m_dimensionEdges[1].first, m_dimensionEdges[1].second,
@@ -870,80 +1044,57 @@ void CreateDimensionTool::onMousePress(const Point& worldPos, const Snapper& sna
                 reset();
                 return;
             }
-            DimensionAnchor a;
-            a.fallback = fartherFrom(vertex, m_dimensionEdges[0]);
-            DimensionAnchor b;
-            b.fallback = fartherFrom(vertex, m_dimensionEdges[1]);
-            auto dim = std::make_unique<Dimension>(m_type, a, b, vertex);
-            dim->setAngularRadius(std::max(5.0, MathUtils::dist(vertex, worldPos)));
-            m_result = std::move(dim);
-            m_finished = true;
+            DimensionAnchor a = fartherAnchorFrom(vertex, m_dimensionEdges[0]);
+            DimensionAnchor b = fartherAnchorFrom(vertex, m_dimensionEdges[1]);
+            m_anchors = {a, b};
+            m_pendingLinePoint = vertex;
             return;
         }
+
+        if (m_anchors.size() == 2 && m_pendingLinePoint.has_value() && !m_pendingAngularRadius.has_value()) {
+            m_pendingAngularRadius = std::max(5.0, MathUtils::dist(*m_pendingLinePoint, makeAnchor(worldPos, snapper, scale).fallback));
+            return;
+        }
+
         if (m_anchors.size() < 2) {
-            m_anchors.push_back(makeAnchor(worldPos, snapper, scale));
-        } else {
+            m_anchors.push_back(picked);
+            return;
+        }
+
+        if (m_anchors.size() == 2) {
             auto third = makeAnchor(worldPos, snapper, scale);
             DimensionAnchor firstRay = m_anchors[1];
             DimensionAnchor secondRay = third;
-            m_result = std::make_unique<Dimension>(m_type, firstRay, secondRay, m_anchors[0].resolve());
-            m_finished = true;
+            m_anchors = {firstRay, secondRay};
+            m_pendingLinePoint = m_anchors[0].resolve();
         }
         return;
     }
 
     if (m_type == DimensionType::Radius || m_type == DimensionType::Diameter) {
-        if (m_anchors.empty()) {
-            auto picked = makeAnchor(worldPos, snapper, scale);
-            DimensionAnchor center = picked;
-            DimensionAnchor edge = picked;
-            if (picked.object && picked.object->getType() == PrimitiveType::Circle) {
-                auto* c = static_cast<const Circle*>(picked.object);
-                center.fallback = c->getCenter();
-                center.snapIndex = 0;
-                edge.fallback = picked.fallback;
-                edge.snapIndex = -1;
-                Point dir(edge.fallback.getX() - center.fallback.getX(), edge.fallback.getY() - center.fallback.getY());
-                double len = std::max(MathUtils::dist(center.fallback, edge.fallback), 1.0);
-                Point linePoint(center.fallback.getX() + dir.getX() / len * c->getRadius() * 1.25,
-                                center.fallback.getY() + dir.getY() / len * c->getRadius() * 1.25);
-                m_result = std::make_unique<Dimension>(m_type, center, edge, linePoint);
-                m_finished = true;
-                return;
-            } else if (picked.object && picked.object->getType() == PrimitiveType::Arc) {
-                auto* a = static_cast<const Arc*>(picked.object);
-                center.fallback = a->getCenter();
-                center.snapIndex = 0;
-                edge.fallback = picked.fallback;
-                edge.snapIndex = -1;
-                Point dir(edge.fallback.getX() - center.fallback.getX(), edge.fallback.getY() - center.fallback.getY());
-                double len = std::max(MathUtils::dist(center.fallback, edge.fallback), 1.0);
-                Point linePoint(center.fallback.getX() + dir.getX() / len * a->getRadius() * 1.25,
-                                center.fallback.getY() + dir.getY() / len * a->getRadius() * 1.25);
-                m_result = std::make_unique<Dimension>(m_type, center, edge, linePoint);
-                m_finished = true;
-                return;
-            } else if (picked.object && picked.object->getType() == PrimitiveType::Ellipse) {
-                auto* e = static_cast<const Ellipse*>(picked.object);
-                center.fallback = e->getCenter();
-                center.snapIndex = 0;
-                edge.fallback = picked.fallback;
-                edge.snapIndex = -1;
-                Point dir(edge.fallback.getX() - center.fallback.getX(), edge.fallback.getY() - center.fallback.getY());
-                double len = std::max(MathUtils::dist(center.fallback, edge.fallback), 1.0);
-                Point linePoint(center.fallback.getX() + dir.getX() * 1.25,
-                                center.fallback.getY() + dir.getY() * 1.25);
-                m_result = std::make_unique<Dimension>(m_type, center, edge, linePoint);
-                m_finished = true;
-                return;
-            }
-            m_anchors.push_back(center);
-            m_anchors.push_back(edge);
-        } else {
-            auto placed = makeAnchor(worldPos, snapper, scale);
-            m_result = std::make_unique<Dimension>(m_type, m_anchors[0], m_anchors[1], placed.fallback);
-            m_finished = true;
+        if (m_pendingLinePoint.has_value()) {
+            finishDimensionWithText(makeAnchor(worldPos, snapper, scale).fallback);
+            return;
         }
+
+        if (m_anchors.empty()) {
+            tryPickRadialAnchors(worldPos, snapper, scale);
+            return;
+        }
+
+        Point center = m_anchors[0].resolve();
+        Point edge = m_anchors[1].resolve();
+        Point dir(worldPos.getX() - center.getX(), worldPos.getY() - center.getY());
+        double len = std::max(MathUtils::dist(center, worldPos), MathUtils::EPSILON);
+        double baseLen = MathUtils::dist(center, edge);
+        const double leaderLen = std::max(baseLen + GlobalSettings::instance().dimensionStyle.dimensionExtension, baseLen * 1.25);
+        m_pendingLinePoint = Point(center.getX() + dir.getX() / len * leaderLen,
+                                   center.getY() + dir.getY() / len * leaderLen);
+        return;
+    }
+
+    if (m_pendingLinePoint.has_value()) {
+        finishDimensionWithText(makeAnchor(worldPos, snapper, scale).fallback);
         return;
     }
 
@@ -952,9 +1103,7 @@ void CreateDimensionTool::onMousePress(const Point& worldPos, const Snapper& sna
         return;
     }
 
-    Point linePoint = makeAnchor(worldPos, snapper, scale).fallback;
-    m_result = std::make_unique<Dimension>(m_type, m_anchors[0], m_anchors[1], linePoint);
-    m_finished = true;
+    m_pendingLinePoint = makeAnchor(worldPos, snapper, scale).fallback;
 }
 
 void CreateDimensionTool::onMouseMove(const Point& worldPos, const Snapper& snapper, double scale)
@@ -1005,7 +1154,7 @@ void CreateDimensionTool::draw(QPainter& painter, double scale)
         painter.setPen(pen);
     }
 
-    auto drawPreviewDimension = [&](const Point& pa, const Point& pb, const Point& linePoint) {
+    auto drawPreviewDimension = [&](const Point& pa, const Point& pb, const Point& linePoint, double textFactor, double textHalfWorld) {
         QPointF a(pa.getX(), pa.getY());
         QPointF b(pb.getX(), pb.getY());
         QPointF lp(linePoint.getX(), linePoint.getY());
@@ -1017,7 +1166,8 @@ void CreateDimensionTool::draw(QPainter& painter, double scale)
         } else if (m_type == DimensionType::Vertical) {
             da = QPointF(lp.x(), a.y());
             db = QPointF(lp.x(), b.y());
-        } else {
+        }
+        else {
             double vx = b.x() - a.x();
             double vy = b.y() - a.y();
             double len = std::hypot(vx, vy);
@@ -1031,29 +1181,91 @@ void CreateDimensionTool::draw(QPainter& painter, double scale)
         }
         painter.drawLine(a, da);
         painter.drawLine(b, db);
-        painter.drawLine(da, db);
+        QPointF lineVec = db - da;
+        const double len = std::hypot(lineVec.x(), lineVec.y());
+        QPointF dimStart = da;
+        QPointF dimEnd = db;
+        if (len > 1e-9) {
+            const double padFactor = textHalfWorld / len;
+            double startFactor = std::min(0.0, textFactor);
+            double endFactor = std::max(1.0, textFactor);
+            if (textFactor < 0.0) startFactor -= padFactor;
+            if (textFactor > 1.0) endFactor += padFactor;
+            dimStart = da + lineVec * startFactor;
+            dimEnd = da + lineVec * endFactor;
+        }
+        painter.drawLine(dimStart, dimEnd);
     };
 
-    if (m_type == DimensionType::Angular && m_anchors.size() == 1) {
+    const QFont previewFont(GlobalSettings::instance().dimensionStyle.fontFamily,
+                            std::max(6, static_cast<int>(GlobalSettings::instance().dimensionStyle.textHeight)));
+    const QFontMetricsF previewMetrics(previewFont);
+
+    if (m_type == DimensionType::Angular && m_pendingLinePoint.has_value() && m_pendingAngularRadius.has_value() && m_anchors.size() >= 2) {
+        Point vertex = *m_pendingLinePoint;
+        Point a = m_anchors[0].resolve();
+        Point b = m_anchors[1].resolve();
+        auto previewDim = buildPreviewDimension(m_cursorPos);
+        painter.drawLine(QPointF(vertex.getX(), vertex.getY()), QPointF(a.getX(), a.getY()));
+        painter.drawLine(QPointF(vertex.getX(), vertex.getY()), QPointF(b.getX(), b.getY()));
+        double a1 = std::atan2(a.getY() - vertex.getY(), a.getX() - vertex.getX());
+        double a2 = std::atan2(b.getY() - vertex.getY(), b.getX() - vertex.getX());
+        double delta = std::fmod(a2 - a1, 2.0 * M_PI);
+        if (delta > M_PI) delta -= 2.0 * M_PI;
+        if (delta < -M_PI) delta += 2.0 * M_PI;
+        if (m_pendingSupplementaryAngle && std::abs(delta) > MathUtils::EPSILON) {
+            delta = delta > 0.0 ? delta - 2.0 * M_PI : delta + 2.0 * M_PI;
+        }
+        double start = a1;
+        double span = delta;
+        if (previewDim) {
+            const double textWidthScreen = previewMetrics.horizontalAdvance(previewDim->displayText()) + 8.0;
+            const double textPosRadius = std::hypot(previewDim->getTextPosition().getX() - vertex.getX(),
+                                                    previewDim->getTextPosition().getY() - vertex.getY());
+            const double radiusScreen = textPosRadius * scale;
+            if (radiusScreen > 1e-9) {
+                const double padAngle = textWidthScreen / radiusScreen;
+                if (previewDim->textPositionFactor() < 0.0) {
+                    start += delta * previewDim->textPositionFactor() - (delta >= 0.0 ? padAngle : -padAngle);
+                    span = (a1 + delta) - start;
+                } else if (previewDim->textPositionFactor() > 1.0) {
+                    span = delta * previewDim->textPositionFactor() + (delta >= 0.0 ? padAngle : -padAngle);
+                }
+            }
+        }
+        double r = *m_pendingAngularRadius;
+        QRectF arcRect(vertex.getX() - r, vertex.getY() - r, r * 2.0, r * 2.0);
+        painter.drawArc(arcRect, int(-qRadiansToDegrees(start) * 16.0), int(-qRadiansToDegrees(span) * 16.0));
+        if (previewDim) drawPreviewDimensionText(painter, *previewDim, scale);
+    } else if (m_type == DimensionType::Angular && m_pendingLinePoint.has_value() && m_anchors.size() >= 2) {
+        Point vertex = *m_pendingLinePoint;
+        Point a = m_anchors[0].resolve();
+        Point b = m_anchors[1].resolve();
+        painter.drawLine(QPointF(vertex.getX(), vertex.getY()), QPointF(a.getX(), a.getY()));
+        painter.drawLine(QPointF(vertex.getX(), vertex.getY()), QPointF(b.getX(), b.getY()));
+        double r = std::max(5.0, MathUtils::dist(vertex, m_cursorPos));
+        QRectF arcRect(vertex.getX() - r, vertex.getY() - r, r * 2.0, r * 2.0);
+        double a1 = std::atan2(a.getY() - vertex.getY(), a.getX() - vertex.getX()) * 180.0 / M_PI;
+        double a2 = std::atan2(b.getY() - vertex.getY(), b.getX() - vertex.getX()) * 180.0 / M_PI;
+        double span = a2 - a1;
+        if (span > 180.0) span -= 360.0;
+        if (span < -180.0) span += 360.0;
+        if (m_pendingSupplementaryAngle && std::abs(span) > 1e-9) {
+            span = span > 0.0 ? span - 360.0 : span + 360.0;
+        }
+        painter.drawArc(arcRect, int(-a1 * 16.0), int(-span * 16.0));
+    } else if (m_type == DimensionType::Angular && m_anchors.size() == 1) {
         Point v = m_anchors[0].resolve();
         painter.drawLine(QPointF(v.getX(), v.getY()), QPointF(m_cursorPos.getX(), m_cursorPos.getY()));
-    } else if (m_type == DimensionType::Angular && m_anchors.size() >= 2) {
+    } else if (m_type == DimensionType::Angular && m_anchors.size() >= 2 && !m_pendingLinePoint.has_value()) {
         Point v = m_anchors[0].resolve();
         Point a = m_anchors[1].resolve();
         painter.drawLine(QPointF(v.getX(), v.getY()), QPointF(a.getX(), a.getY()));
         painter.drawLine(QPointF(v.getX(), v.getY()), QPointF(m_cursorPos.getX(), m_cursorPos.getY()));
-        double r = std::max(15.0 / scale, std::min(MathUtils::dist(v, a), MathUtils::dist(v, m_cursorPos)) * 0.65);
-        QRectF arcRect(v.getX() - r, v.getY() - r, r * 2.0, r * 2.0);
-        double a1 = std::atan2(a.getY() - v.getY(), a.getX() - v.getX()) * 180.0 / M_PI;
-        double a2 = std::atan2(m_cursorPos.getY() - v.getY(), m_cursorPos.getX() - v.getX()) * 180.0 / M_PI;
-        double span = a2 - a1;
-        if (span > 180.0) span -= 360.0;
-        if (span < -180.0) span += 360.0;
-        painter.drawArc(arcRect, int(-a1 * 16.0), int(-span * 16.0));
     } else if (m_type == DimensionType::Angular && m_dimensionEdges.size() == 1) {
         painter.drawLine(QPointF(m_dimensionEdges[0].first.getX(), m_dimensionEdges[0].first.getY()),
                          QPointF(m_dimensionEdges[0].second.getX(), m_dimensionEdges[0].second.getY()));
-    } else if (m_type == DimensionType::Angular && m_dimensionEdges.size() == 2) {
+    } else if (m_type == DimensionType::Angular && m_dimensionEdges.size() == 2 && !m_pendingLinePoint.has_value()) {
         Point vertex;
         if (intersectInfiniteLines(m_dimensionEdges[0].first, m_dimensionEdges[0].second,
                                    m_dimensionEdges[1].first, m_dimensionEdges[1].second,
@@ -1071,16 +1283,56 @@ void CreateDimensionTool::draw(QPainter& painter, double scale)
             if (span < -180.0) span += 360.0;
             painter.drawArc(arcRect, int(-a1 * 16.0), int(-span * 16.0));
         }
+    } else if ((m_type == DimensionType::Radius || m_type == DimensionType::Diameter) && m_pendingLinePoint.has_value() && m_anchors.size() >= 2) {
+        auto previewDim = buildPreviewDimension(m_cursorPos);
+        Point c = m_anchors[0].resolve();
+        Point e = m_anchors[1].resolve();
+        Point lp = *m_pendingLinePoint;
+        if (previewDim) {
+            double r = previewDim->measuredValue();
+            if (previewDim->getDimensionType() == DimensionType::Diameter) r *= 0.5;
+            QPointF center(c.getX(), c.getY());
+            QPointF dir(lp.getX() - c.getX(), lp.getY() - c.getY());
+            const double len = std::hypot(dir.x(), dir.y());
+            if (len > 1e-9) {
+                dir /= len;
+                QPointF edge1 = center + dir * r;
+                QPointF edge2 = center - dir * r;
+                QPointF start = previewDim->getDimensionType() == DimensionType::Diameter ? edge2 : center;
+                QPointF end = edge1;
+                QPointF vec = end - start;
+                const double baseLen = std::hypot(vec.x(), vec.y());
+                double t = previewDim->textPositionFactor();
+                double startFactor = std::min(0.0, t);
+                double endFactor = std::max(1.0, t);
+                const double padFactor = baseLen > 1e-9 ? ((previewMetrics.horizontalAdvance(previewDim->displayText()) * 0.5 + 4.0) / scale) / baseLen : 0.0;
+                if (t < 0.0) startFactor -= padFactor;
+                if (t > 1.0) endFactor += padFactor;
+                painter.drawLine(start + vec * startFactor, start + vec * endFactor);
+                drawPreviewDimensionText(painter, *previewDim, scale);
+            }
+        } else {
+            painter.drawLine(QPointF(c.getX(), c.getY()), QPointF(e.getX(), e.getY()));
+            painter.drawLine(QPointF(c.getX(), c.getY()), QPointF(m_pendingLinePoint->getX(), m_pendingLinePoint->getY()));
+        }
     } else if ((m_type == DimensionType::Radius || m_type == DimensionType::Diameter) && m_anchors.size() >= 2) {
         Point c = m_anchors[0].resolve();
         painter.drawLine(QPointF(c.getX(), c.getY()), QPointF(m_cursorPos.getX(), m_cursorPos.getY()));
+    } else if (m_pendingLinePoint.has_value() && m_anchors.size() >= 2) {
+        Point a = m_anchors[0].resolve();
+        Point b = m_anchors[1].resolve();
+        auto previewDim = buildPreviewDimension(m_cursorPos);
+        const double textFactor = previewDim ? previewDim->textPositionFactor() : 0.5;
+        const double textHalfWorld = previewDim ? ((previewMetrics.horizontalAdvance(previewDim->displayText()) * 0.5 + 4.0) / scale) : 0.0;
+        drawPreviewDimension(a, b, *m_pendingLinePoint, textFactor, textHalfWorld);
+        if (previewDim) drawPreviewDimensionText(painter, *previewDim, scale);
     } else if (m_anchors.size() == 1) {
         Point a = m_anchors[0].resolve();
         painter.drawLine(QPointF(a.getX(), a.getY()), QPointF(m_cursorPos.getX(), m_cursorPos.getY()));
     } else if (m_anchors.size() >= 2) {
         Point a = m_anchors[0].resolve();
         Point b = m_anchors[1].resolve();
-        drawPreviewDimension(a, b, m_cursorPos);
+        drawPreviewDimension(a, b, m_cursorPos, 0.5, 0.0);
     }
 }
 
@@ -1088,6 +1340,9 @@ std::unique_ptr<Object> CreateDimensionTool::takeObject() { return std::move(m_r
 void CreateDimensionTool::reset() {
     m_finished = false;
     m_anchors.clear();
+    m_pendingLinePoint.reset();
+    m_pendingAngularRadius.reset();
+    m_pendingSupplementaryAngle = false;
     m_dimensionEdges.clear();
     m_hoverEdge.reset();
     m_hoverCurveObject = nullptr;

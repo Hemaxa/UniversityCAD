@@ -13,6 +13,14 @@ class Scene;
 class Snapper;
 class Object;
 
+struct DimensionEdgeRef {
+    Point first;
+    Point second;
+    const Object* object = nullptr;
+    int firstSnapIndex = -1;
+    int secondSnapIndex = -1;
+};
+
 class Tool {
 public:
     virtual ~Tool() = default;
@@ -172,15 +180,22 @@ public:
     void draw(QPainter& painter, double scale) override;
     std::unique_ptr<Object> takeObject() override;
     void reset() override;
+    void toggleAngularSide();
 
 private:
     DimensionAnchor makeAnchor(const Point& raw, const Snapper& snapper, double scale) const;
+    bool tryPickRadialAnchors(const Point& worldPos, const Snapper& snapper, double scale);
+    void finishDimensionWithText(const Point& textPos);
+    std::unique_ptr<Dimension> buildPreviewDimension(const Point& textPos) const;
 
     DimensionType m_type;
     std::vector<DimensionAnchor> m_anchors;
     Point m_cursorPos;
     std::unique_ptr<Object> m_result;
-    std::optional<std::pair<Point, Point>> m_hoverEdge;
-    std::vector<std::pair<Point, Point>> m_dimensionEdges;
+    std::optional<Point> m_pendingLinePoint;
+    std::optional<double> m_pendingAngularRadius;
+    bool m_pendingSupplementaryAngle = false;
+    std::optional<DimensionEdgeRef> m_hoverEdge;
+    std::vector<DimensionEdgeRef> m_dimensionEdges;
     const Object* m_hoverCurveObject = nullptr;
 };

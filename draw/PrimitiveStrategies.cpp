@@ -974,6 +974,59 @@ static QPen makeDimensionPen(const LineStyle& style, const QColor& color, bool i
     return pen;
 }
 
+static std::pair<double, double> extendedFactorRange(double factor)
+{
+    return {std::min(0.0, factor), std::max(1.0, factor)};
+}
+
+static void drawTextAlongArc(QPainter& painter,
+                             const QString& text,
+                             const QFont& font,
+                             const QColor& color,
+                             const QPointF& centerScreen,
+                             double radiusScreen,
+                             double middleAngleDeg,
+                             double tangentSign)
+{
+    if (text.isEmpty() || radiusScreen < 1.0) {
+        return;
+    }
+
+    QFontMetricsF metrics(font);
+    double totalAdvance = 0.0;
+    for (const QChar ch : text) {
+        totalAdvance += metrics.horizontalAdvance(ch);
+    }
+    if (totalAdvance <= 0.0) {
+        return;
+    }
+
+    const double anglePerPixel = 180.0 / (M_PI * radiusScreen);
+    double angleCursor = middleAngleDeg - tangentSign * totalAdvance * anglePerPixel * 0.5;
+
+    painter.save();
+    painter.setFont(font);
+    painter.setPen(color);
+    for (const QChar ch : text) {
+        const QString glyph(ch);
+        const double advance = metrics.horizontalAdvance(glyph);
+        const double glyphAngle = angleCursor + tangentSign * advance * anglePerPixel * 0.5;
+        const double glyphRad = qDegreesToRadians(glyphAngle);
+        const QPointF pos(centerScreen.x() + std::cos(glyphRad) * radiusScreen,
+                          centerScreen.y() - std::sin(glyphRad) * radiusScreen);
+
+        painter.save();
+        painter.translate(pos);
+        painter.rotate(-glyphAngle + (tangentSign >= 0.0 ? -90.0 : 90.0));
+        const QRectF rect(-advance * 0.5, -metrics.height() * 0.5, advance, metrics.height());
+        painter.drawText(rect, Qt::AlignCenter, glyph);
+        painter.restore();
+
+        angleCursor += tangentSign * advance * anglePerPixel;
+    }
+    painter.restore();
+}
+
 void DimensionDraw::draw(QPainter& painter, Object* primitive, bool isSelected) const
 {
     auto* d = static_cast<Dimension*>(primitive);
@@ -994,6 +1047,9 @@ void DimensionDraw::draw(QPainter& painter, Object* primitive, bool isSelected) 
     QPointF dimStart;
     QPointF dimEnd;
     double textAngleDeg = 0.0;
+    const QString dimensionText = d->displayText();
+    QFont textFont(d->fontFamily(), std::max(6, static_cast<int>(d->textHeight())));
+    QFontMetricsF textMetrics(textFont);
 
     auto normalized = [](const QPointF& v) {
         const double len = std::hypot(v.x(), v.y());
@@ -1028,6 +1084,12 @@ void DimensionDraw::draw(QPainter& painter, Object* primitive, bool isSelected) 
         painter.drawLine(source, target + overshoot);
     };
 
+    bool drawCurvedAngularText = false;
+    QPointF arcTextCenterScreen;
+    double arcTextRadiusScreen = 0.0;
+    double arcTextAngleDeg = 0.0;
+    double arcTextTangentSign = 1.0;
+
     if (d->getDimensionType() == DimensionType::Radius || d->getDimensionType() == DimensionType::Diameter) {
         double r = d->measuredValue();
         if (d->getDimensionType() == DimensionType::Diameter) r *= 0.5;
@@ -1037,24 +1099,34 @@ void DimensionDraw::draw(QPainter& painter, Object* primitive, bool isSelected) 
         }
         QPointF edge1 = a + dir * r;
         QPointF edge2 = a - dir * r;
+        const auto [startFactor, endFactor] = extendedFactorRange(d->textPositionFactor());
+        const QPointF radialStart = (d->getDimensionType() == DimensionType::Diameter) ? edge2 : a;
+        const QPointF radialEnd = edge1;
+        QPointF lineVec = radialEnd - radialStart;
+        const double lineLen = std::hypot(lineVec.x(), lineVec.y());
+        double previewStartFactor = startFactor;
+        double previewEndFactor = endFactor;
+        if (lineLen > 1e-9) {
+            const double padFactor = ((textMetrics.horizontalAdvance(dimensionText) * 0.5) + 4.0) * inv / lineLen;
+            if (d->textPositionFactor() < 0.0) previewStartFactor -= padFactor;
+            if (d->textPositionFactor() > 1.0) previewEndFactor += padFactor;
+        }
+        const QPointF lineStart = radialStart + lineVec * previewStartFactor;
+        const QPointF lineEnd = radialStart + lineVec * previewEndFactor;
 
         painter.setPen(dimPen);
         if (d->getDimensionType() == DimensionType::Radius) {
-            QPointF leaderEnd = linePoint;
-            if (std::hypot(leaderEnd.x() - a.x(), leaderEnd.y() - a.y()) < r) {
-                leaderEnd = edge1;
-            }
-            painter.drawLine(a, leaderEnd);
+            painter.drawLine(lineStart, lineEnd);
             double arrowAngle = std::atan2(a.y() - edge1.y(), a.x() - edge1.x());
             if (d->arrowPlacement() == ArrowPlacement::Inside) arrowAngle += M_PI;
             drawArrowHead(painter, edge1, arrowAngle, d, inv);
-            textAngleDeg = screenAngle(leaderEnd - a);
+            textAngleDeg = screenAngle(lineEnd - lineStart);
         } else {
-            painter.drawLine(edge2, edge1);
+            painter.drawLine(lineStart, lineEnd);
             const bool outside = d->arrowPlacement() == ArrowPlacement::Inside;
             drawArrowHead(painter, edge2, std::atan2(edge1.y() - edge2.y(), edge1.x() - edge2.x()) + (outside ? M_PI : 0.0), d, inv);
             drawArrowHead(painter, edge1, std::atan2(edge2.y() - edge1.y(), edge2.x() - edge1.x()) + (outside ? M_PI : 0.0), d, inv);
-            textAngleDeg = screenAngle(edge1 - edge2);
+            textAngleDeg = screenAngle(lineEnd - lineStart);
         }
         drawGrip(a, false);
         drawGrip(linePoint, true);
@@ -1064,6 +1136,9 @@ void DimensionDraw::draw(QPainter& painter, Object* primitive, bool isSelected) 
         double delta = std::fmod(a2 - a1, 2.0 * M_PI);
         if (delta > M_PI) delta -= 2.0 * M_PI;
         if (delta < -M_PI) delta += 2.0 * M_PI;
+        if (d->useSupplementaryAngle() && std::abs(delta) > 1e-9) {
+            delta = delta > 0.0 ? delta - 2.0 * M_PI : delta + 2.0 * M_PI;
+        }
         const double r = d->angularRadius() > 1e-9
             ? d->angularRadius()
             : std::max(15.0, std::min(std::hypot(a.x() - linePoint.x(), a.y() - linePoint.y()),
@@ -1087,13 +1162,33 @@ void DimensionDraw::draw(QPainter& painter, Object* primitive, bool isSelected) 
         drawAngularExtension(a1 + delta, b);
 
         painter.setPen(dimPen);
+        const auto [startFactor, endFactor] = extendedFactorRange(d->textPositionFactor());
+        double arcStart = a1 + delta * startFactor;
+        double arcSpan = delta * (endFactor - startFactor);
+        const QPointF textPosWorld(d->getTextPosition().getX(), d->getTextPosition().getY());
+        arcTextCenterScreen = worldTransform.map(linePoint);
+        QPointF textPosScreen = worldTransform.map(textPosWorld);
+        arcTextRadiusScreen = std::hypot(textPosScreen.x() - arcTextCenterScreen.x(), textPosScreen.y() - arcTextCenterScreen.y());
+        if (arcTextRadiusScreen > 1e-9) {
+            const double padAngle = (textMetrics.horizontalAdvance(dimensionText) * 0.5 + 4.0) / arcTextRadiusScreen;
+            if (d->textPositionFactor() < 0.0) {
+                arcStart -= delta >= 0.0 ? padAngle : -padAngle;
+                arcSpan += delta >= 0.0 ? padAngle : -padAngle;
+            }
+            if (d->textPositionFactor() > 1.0) {
+                arcSpan += delta >= 0.0 ? padAngle : -padAngle;
+            }
+        }
         QRectF rect(linePoint.x() - r, linePoint.y() - r, r * 2.0, r * 2.0);
-        painter.drawArc(rect, int(-qRadiansToDegrees(a1) * 16.0), int(-qRadiansToDegrees(delta) * 16.0));
+        painter.drawArc(rect, int(-qRadiansToDegrees(arcStart) * 16.0), int(-qRadiansToDegrees(arcSpan) * 16.0));
         const double tangentSign = delta >= 0 ? 1.0 : -1.0;
         drawArrowHead(painter, arcA, a1 + tangentSign * M_PI / 2.0, d, inv);
         drawArrowHead(painter, arcB, a1 + delta - tangentSign * M_PI / 2.0, d, inv);
-        const double textAngle = a1 + delta * d->textPositionFactor() + tangentSign * M_PI / 2.0;
-        textAngleDeg = screenAngle(QPointF(std::cos(textAngle), std::sin(textAngle)));
+        const double textAngle = a1 + delta * d->textPositionFactor();
+        arcTextAngleDeg = qRadiansToDegrees(textAngle);
+        arcTextTangentSign = tangentSign;
+        drawCurvedAngularText = true;
+        textAngleDeg = screenAngle(QPointF(std::cos(textAngle + tangentSign * M_PI / 2.0), std::sin(textAngle + tangentSign * M_PI / 2.0)));
         drawGrip(linePoint, false);
         drawGrip(a, true);
         drawGrip(b, true);
@@ -1122,8 +1217,17 @@ void DimensionDraw::draw(QPainter& painter, Object* primitive, bool isSelected) 
 
     QPointF u = normalized(db - da);
     QPointF n(-u.y(), u.x());
-    dimStart = da - u * d->dimensionExtension();
-    dimEnd = db + u * d->dimensionExtension();
+    const auto [startFactor, endFactor] = extendedFactorRange(d->textPositionFactor());
+    double adjustedStartFactor = startFactor;
+    double adjustedEndFactor = endFactor;
+    const double baseLen = std::hypot(db.x() - da.x(), db.y() - da.y());
+    if (baseLen > 1e-9) {
+        const double padFactor = ((textMetrics.horizontalAdvance(dimensionText) * 0.5) + 4.0) * inv / baseLen;
+        if (d->textPositionFactor() < 0.0) adjustedStartFactor -= padFactor;
+        if (d->textPositionFactor() > 1.0) adjustedEndFactor += padFactor;
+    }
+    dimStart = da + (db - da) * adjustedStartFactor - u * d->dimensionExtension();
+    dimEnd = da + (db - da) * adjustedEndFactor + u * d->dimensionExtension();
 
     painter.setPen(extPen);
     drawExtension(a, da, n);
@@ -1151,12 +1255,23 @@ void DimensionDraw::draw(QPainter& painter, Object* primitive, bool isSelected) 
     QPointF sp = worldTransform.map(textPos);
     painter.save();
     painter.resetTransform();
-    QFont font(d->fontFamily(), std::max(6, static_cast<int>(d->textHeight())));
-    painter.setFont(font);
-    painter.setPen(isSelected ? QColor("#F92672") : d->textColor());
-    painter.translate(sp);
-    painter.rotate(textAngleDeg);
-    QRectF textRect(-70, -14, 140, 28);
-    painter.drawText(textRect, Qt::AlignCenter, d->displayText());
+    QFont font = textFont;
+    if (drawCurvedAngularText) {
+        drawTextAlongArc(painter,
+                         dimensionText,
+                         font,
+                         isSelected ? QColor("#F92672") : d->textColor(),
+                         arcTextCenterScreen,
+                         arcTextRadiusScreen,
+                         arcTextAngleDeg,
+                         arcTextTangentSign);
+    } else {
+        painter.setFont(font);
+        painter.setPen(isSelected ? QColor("#F92672") : d->textColor());
+        painter.translate(sp);
+        painter.rotate(textAngleDeg);
+        QRectF textRect(-70, -14, 140, 28);
+        painter.drawText(textRect, Qt::AlignCenter, dimensionText);
+    }
     painter.restore();
 }

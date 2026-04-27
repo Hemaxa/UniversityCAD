@@ -52,6 +52,8 @@ public slots:
     void zoomToExtents();
     void rotateLeft();
     void rotateRight();
+    void toggleActiveAngularDimensionSide();
+    void editSelectedDimensionValue();
 
 signals:
     void selectionChanged(const std::vector<Object*>& selectedObjects);
@@ -83,6 +85,7 @@ private:
     // Поиск объекта по точке (для клика)
     Object* pickObjectAtPoint(const QPoint& screenPoint);
     bool beginDimensionGripDrag(Dimension* dim, const Point& worldPoint);
+    bool isDimensionTextHit(const Dimension* dim, const QPointF& screenPos) const;
 
     Scene* m_scene = nullptr;
     const std::map<PrimitiveType, std::unique_ptr<Draw>>* m_drawingStrategies = nullptr;

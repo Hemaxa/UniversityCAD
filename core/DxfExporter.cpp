@@ -1116,7 +1116,8 @@ bool DxfExporter::exportScene(const Scene* scene, const QString& filePath) {
                      << encodeDimString(dim->fontFamily())
                      << QString::number(dim->textHeight(), 'f', 10)
                      << QString::number(dim->textOffset(), 'f', 10)
-                     << QString::number(dim->angularRadius(), 'f', 10);
+                     << QString::number(dim->angularRadius(), 'f', 10)
+                     << QString::number(dim->useSupplementaryAngle() ? 1 : 0);
 
                 writeCode(0, "POINT");
                 writeCommonProperties("AcDbPoint");

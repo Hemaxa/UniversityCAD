@@ -76,6 +76,9 @@ public:
     void setTextOffset(double v) { m_textOffset = v; }
     double angularRadius() const { return m_angularRadius; }
     void setAngularRadius(double r) { m_angularRadius = r; }
+    bool useSupplementaryAngle() const { return m_useSupplementaryAngle; }
+    void setUseSupplementaryAngle(bool v) { m_useSupplementaryAngle = v; }
+    void toggleAngleSide() { m_useSupplementaryAngle = !m_useSupplementaryAngle; }
 
     void applyGlobalStyle();
     bool applyMeasuredValue(double newValue);
@@ -96,14 +99,15 @@ private:
     QColor m_textColor = Qt::white;
     LineStyle m_extensionLineStyle = {LineStyleType::SolidThin, "Сплошная тонкая", 0, 0, false};
     LineStyle m_dimensionLineStyle = {LineStyleType::SolidThin, "Сплошная тонкая", 0, 0, false};
-    double m_extensionOvershoot = 6.0;
-    double m_dimensionExtension = 4.0;
+    double m_extensionOvershoot = 8.0;
+    double m_dimensionExtension = 0.0;
     ArrowType m_arrowType = ArrowType::Closed;
     ArrowPlacement m_arrowPlacement = ArrowPlacement::Inside;
-    double m_arrowSize = 8.0;
+    double m_arrowSize = 12.0;
     bool m_arrowFilled = true;
-    QString m_fontFamily = "Arial";
-    double m_textHeight = 12.0;
-    double m_textOffset = 4.0;
+    QString m_fontFamily = "Courier New";
+    double m_textHeight = 16.0;
+    double m_textOffset = 10.0;
     double m_angularRadius = 0.0;
+    bool m_useSupplementaryAngle = false;
 };

@@ -640,9 +640,10 @@ QWidget* Properties::createDimensionWidget() {
     m_dimValue = createSpin(0, 0, 100000);
     m_dimTextOverrideEdit = new QLineEdit();
     m_dimCenterTextButton = new QPushButton("Центрировать");
+    m_dimToggleSideButton = new QPushButton("Сменить сторону");
     m_dimArrowCombo = new QComboBox();
-    m_dimArrowCombo->addItem(QIcon(":/icons/arrow-closed.svg"), "Закрытая", static_cast<int>(ArrowType::Closed));
-    m_dimArrowCombo->addItem(QIcon(":/icons/arrow-open.svg"), "Открытая", static_cast<int>(ArrowType::Open));
+    m_dimArrowCombo->addItem(QIcon(":/icons/arrow-open.svg"), "Закрытая", static_cast<int>(ArrowType::Closed));
+    m_dimArrowCombo->addItem(QIcon(":/icons/arrow-closed.svg"), "Открытая", static_cast<int>(ArrowType::Open));
     m_dimArrowCombo->addItem(QIcon(":/icons/arrow-tick.svg"), "Засечка", static_cast<int>(ArrowType::Tick));
     m_dimArrowCombo->addItem(QIcon(":/icons/arrow-dot.svg"), "Точка", static_cast<int>(ArrowType::Dot));
     m_dimArrowPlacementCombo = new QComboBox();
@@ -661,11 +662,26 @@ QWidget* Properties::createDimensionWidget() {
     addRow(gl, 6, createLbl("Размер шрифта:"), m_dimTextHeight);
     addRow(gl, 7, createLbl("Отступ текста:"), m_dimTextOffset);
     addRow(gl, 8, createLbl("Позиция текста:"), m_dimCenterTextButton);
+    addRow(gl, 9, createLbl("Сторона угла:"), m_dimToggleSideButton);
 
     connect(m_dimCenterTextButton, &QPushButton::clicked, this, [this]() {
         for (auto* obj : m_currentObjects) {
             if (auto* d = dynamic_cast<Dimension*>(obj)) {
                 d->centerText();
+            }
+        }
+        emit objectsModified(m_currentObjects);
+        if (!m_currentObjects.empty()) populateFields(m_currentObjects.front());
+    });
+
+    connect(m_dimToggleSideButton, &QPushButton::clicked, this, [this]() {
+        if (m_isCreationMode) {
+            emit dimensionSideToggleRequested();
+            return;
+        }
+        for (auto* obj : m_currentObjects) {
+            if (auto* d = dynamic_cast<Dimension*>(obj)) {
+                d->toggleAngleSide();
             }
         }
         emit objectsModified(m_currentObjects);
@@ -856,6 +872,11 @@ void Properties::showCreationPropertiesFor(PrimitiveType type, int methodIndex) 
         m_styleGroup->show();
     }
 
+    if (m_dimToggleSideButton) {
+        m_dimToggleSideButton->setVisible(type == PrimitiveType::Dimension
+                                          && methodIndex == static_cast<int>(DimensionType::Angular));
+    }
+
     m_stylePresetButton->setText(m_currentStyle.name);
     m_colorButton->setStyleSheet(QString("background-color: %1").arg(m_selectedColor.name()));
     m_layerCombo->setCurrentText(m_selectedLayer);
@@ -880,6 +901,12 @@ void Properties::showEditingPropertiesFor(const std::vector<Object*>& objects) {
         else m_stack->setCurrentWidget(m_placeholderWidget);
     } else {
         m_stack->setCurrentWidget(m_placeholderWidget);
+    }
+    if (m_dimToggleSideButton) {
+        const bool showToggle = objects.size() == 1
+            && objects[0]->getType() == PrimitiveType::Dimension
+            && static_cast<Dimension*>(objects[0])->getDimensionType() == DimensionType::Angular;
+        m_dimToggleSideButton->setVisible(showToggle);
     }
     populateStyleFields(objects);
 }

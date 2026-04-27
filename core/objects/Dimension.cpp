@@ -27,6 +27,8 @@ Point DimensionAnchor::resolve() const
     return fallback;
 }
 
+static double dimensionArcDelta(double a1, double a2, bool supplementary);
+
 Dimension::Dimension(DimensionType type, const DimensionAnchor& a, const DimensionAnchor& b, const Point& linePoint)
     : m_type(type), m_a(a), m_b(b), m_linePoint(linePoint)
 {
@@ -88,9 +90,7 @@ double Dimension::measuredValue() const
     case DimensionType::Angular: {
         const double a1 = std::atan2(a.getY() - m_linePoint.getY(), a.getX() - m_linePoint.getX());
         const double a2 = std::atan2(b.getY() - m_linePoint.getY(), b.getX() - m_linePoint.getX());
-        double deg = std::abs(qRadiansToDegrees(a2 - a1));
-        if (deg > 180.0) deg = 360.0 - deg;
-        return deg;
+        return std::abs(qRadiansToDegrees(dimensionArcDelta(a1, a2, m_useSupplementaryAngle)));
     }
     case DimensionType::Linear:
     default:
@@ -108,7 +108,7 @@ QString Dimension::displayText() const
 
 void Dimension::setTextPositionFactor(double factor)
 {
-    m_textPositionFactor = std::clamp(factor, 0.0, 1.0);
+    m_textPositionFactor = factor;
 }
 
 static Point interpolate(const Point& a, const Point& b, double t)
@@ -122,14 +122,13 @@ static Point offsetPoint(const Point& p, double nx, double ny, double amount)
     return Point(p.getX() + nx * amount, p.getY() + ny * amount);
 }
 
-static double projectFactorOnSegment(const Point& p, const Point& a, const Point& b)
+static double projectFactorOnLine(const Point& p, const Point& a, const Point& b)
 {
     const double dx = b.getX() - a.getX();
     const double dy = b.getY() - a.getY();
     const double len2 = dx * dx + dy * dy;
     if (len2 < MathUtils::EPSILON) return 0.5;
-    const double t = ((p.getX() - a.getX()) * dx + (p.getY() - a.getY()) * dy) / len2;
-    return std::clamp(t, 0.0, 1.0);
+    return ((p.getX() - a.getX()) * dx + (p.getY() - a.getY()) * dy) / len2;
 }
 
 static double shortestArcDelta(double a1, double a2)
@@ -140,9 +139,39 @@ static double shortestArcDelta(double a1, double a2)
     return delta;
 }
 
+static double dimensionArcDelta(double a1, double a2, bool supplementary)
+{
+    double delta = shortestArcDelta(a1, a2);
+    if (!supplementary || std::abs(delta) < MathUtils::EPSILON) {
+        return delta;
+    }
+    return delta > 0.0 ? delta - 2.0 * M_PI : delta + 2.0 * M_PI;
+}
+
+static Point preferredTextNormal(double vx, double vy)
+{
+    const double len = std::hypot(vx, vy);
+    if (len < MathUtils::EPSILON) {
+        return Point(0.0, 1.0);
+    }
+
+    double nx = -vy / len;
+    double ny = vx / len;
+    if (std::abs(vx) >= std::abs(vy)) {
+        if (ny < 0.0) {
+            nx = -nx;
+            ny = -ny;
+        }
+    } else if (nx > 0.0) {
+        nx = -nx;
+        ny = -ny;
+    }
+    return Point(nx, ny);
+}
+
 Point Dimension::getTextPosition() const
 {
-    const double t = std::clamp(m_textPositionFactor, 0.0, 1.0);
+    const double t = m_textPositionFactor;
     Point a = m_a.resolve();
     Point b = m_b.resolve();
     if (m_type == DimensionType::Horizontal) {
@@ -176,17 +205,22 @@ Point Dimension::getTextPosition() const
         const double vy = b.getY() - a.getY();
         const double len = std::hypot(vx, vy);
         if (len > MathUtils::EPSILON) {
-            const double nx = -vy / len;
-            const double ny = vx / len;
-            const double off = (m_linePoint.getX() - a.getX()) * nx + (m_linePoint.getY() - a.getY()) * ny;
-            return Point(a.getX() + vx * t + nx * (off + m_textOffset),
-                         a.getY() + vy * t + ny * (off + m_textOffset));
+            const Point n = preferredTextNormal(vx, vy);
+            const double nx = n.getX();
+            const double ny = n.getY();
+            const double baseNx = -vy / len;
+            const double baseNy = vx / len;
+            const double off = (m_linePoint.getX() - a.getX()) * baseNx + (m_linePoint.getY() - a.getY()) * baseNy;
+            const Point base(a.getX() + vx * t + baseNx * off,
+                             a.getY() + vy * t + baseNy * off);
+            return Point(base.getX() + nx * m_textOffset,
+                         base.getY() + ny * m_textOffset);
         }
     }
     if (m_type == DimensionType::Angular) {
         const double a1 = std::atan2(a.getY() - m_linePoint.getY(), a.getX() - m_linePoint.getX());
         const double a2 = std::atan2(b.getY() - m_linePoint.getY(), b.getX() - m_linePoint.getX());
-        const double delta = shortestArcDelta(a1, a2);
+        const double delta = dimensionArcDelta(a1, a2, m_useSupplementaryAngle);
         const double r = m_angularRadius > MathUtils::EPSILON
             ? m_angularRadius
             : std::max(15.0, std::min(MathUtils::dist(m_linePoint, a), MathUtils::dist(m_linePoint, b)) * 0.65);
@@ -222,7 +256,7 @@ Point Dimension::getLineGripPosition() const
     if (m_type == DimensionType::Angular) {
         const double a1 = std::atan2(a.getY() - m_linePoint.getY(), a.getX() - m_linePoint.getX());
         const double a2 = std::atan2(b.getY() - m_linePoint.getY(), b.getX() - m_linePoint.getX());
-        const double delta = shortestArcDelta(a1, a2);
+        const double delta = dimensionArcDelta(a1, a2, m_useSupplementaryAngle);
         const double r = m_angularRadius > MathUtils::EPSILON
             ? m_angularRadius
             : std::max(15.0, std::min(MathUtils::dist(m_linePoint, a), MathUtils::dist(m_linePoint, b)) * 0.65);
@@ -239,11 +273,11 @@ void Dimension::setTextPosition(const Point& p)
     Point b = m_b.resolve();
 
     if (m_type == DimensionType::Horizontal) {
-        setTextPositionFactor(projectFactorOnSegment(p, Point(a.getX(), m_linePoint.getY()), Point(b.getX(), m_linePoint.getY())));
+        setTextPositionFactor(projectFactorOnLine(p, Point(a.getX(), m_linePoint.getY()), Point(b.getX(), m_linePoint.getY())));
         return;
     }
     if (m_type == DimensionType::Vertical) {
-        setTextPositionFactor(projectFactorOnSegment(p, Point(m_linePoint.getX(), a.getY()), Point(m_linePoint.getX(), b.getY())));
+        setTextPositionFactor(projectFactorOnLine(p, Point(m_linePoint.getX(), a.getY()), Point(m_linePoint.getX(), b.getY())));
         return;
     }
     if (m_type == DimensionType::Linear) {
@@ -256,7 +290,7 @@ void Dimension::setTextPosition(const Point& p)
             const double off = (m_linePoint.getX() - a.getX()) * nx + (m_linePoint.getY() - a.getY()) * ny;
             Point da(a.getX() + nx * off, a.getY() + ny * off);
             Point db(b.getX() + nx * off, b.getY() + ny * off);
-            setTextPositionFactor(projectFactorOnSegment(p, da, db));
+            setTextPositionFactor(projectFactorOnLine(p, da, db));
         }
         return;
     }
@@ -277,13 +311,15 @@ void Dimension::setTextPosition(const Point& p)
                 ? Point(a.getX() - dx * r, a.getY() - dy * r)
                 : a;
             Point p2(a.getX() + dx * r, a.getY() + dy * r);
-            setTextPositionFactor(projectFactorOnSegment(p, p1, p2));
+            setTextPositionFactor(projectFactorOnLine(p, p1, p2));
         }
         return;
     }
     if (m_type == DimensionType::Angular) {
         const double a1 = std::atan2(a.getY() - m_linePoint.getY(), a.getX() - m_linePoint.getX());
-        const double delta = shortestArcDelta(a1, std::atan2(b.getY() - m_linePoint.getY(), b.getX() - m_linePoint.getX()));
+        const double delta = dimensionArcDelta(a1,
+                                               std::atan2(b.getY() - m_linePoint.getY(), b.getX() - m_linePoint.getX()),
+                                               m_useSupplementaryAngle);
         if (std::abs(delta) > MathUtils::EPSILON) {
             double angle = std::atan2(p.getY() - m_linePoint.getY(), p.getX() - m_linePoint.getX());
             double rel = shortestArcDelta(a1, angle) / delta;
@@ -346,6 +382,45 @@ static bool setProjectedSegmentSize(const DimensionAnchor& a, const DimensionAnc
     }
     if (a.snapIndex == 0) s->setEnd(moved);
     else s->setStart(moved);
+    return true;
+}
+
+static bool setAngleBetweenSegments(const Dimension& dim, double newValue)
+{
+    if (!dim.firstAnchor().object || !dim.secondAnchor().object) return false;
+    if (dim.firstAnchor().object->getType() != PrimitiveType::Segment
+        || dim.secondAnchor().object->getType() != PrimitiveType::Segment) return false;
+    if (dim.firstAnchor().snapIndex < 0 || dim.secondAnchor().snapIndex < 0) return false;
+
+    auto* firstSegment = const_cast<Segment*>(static_cast<const Segment*>(dim.firstAnchor().object));
+    auto* secondSegment = const_cast<Segment*>(static_cast<const Segment*>(dim.secondAnchor().object));
+
+    const Point firstFar = dim.firstAnchor().resolve();
+    const Point secondFar = dim.secondAnchor().resolve();
+    const Point firstNear = dim.firstAnchor().snapIndex == 0 ? firstSegment->getEnd() : firstSegment->getStart();
+    const Point secondNear = dim.secondAnchor().snapIndex == 0 ? secondSegment->getEnd() : secondSegment->getStart();
+
+    if (MathUtils::dist(firstNear, secondNear) > 1e-6) return false;
+
+    const Point vertex = firstNear;
+    const double firstLen = MathUtils::dist(vertex, firstFar);
+    const double secondLen = MathUtils::dist(vertex, secondFar);
+    if (firstLen < MathUtils::EPSILON || secondLen < MathUtils::EPSILON) return false;
+
+    const double a1 = std::atan2(firstFar.getY() - vertex.getY(), firstFar.getX() - vertex.getX());
+    const double a2 = std::atan2(secondFar.getY() - vertex.getY(), secondFar.getX() - vertex.getX());
+    const double currentDelta = dimensionArcDelta(a1, a2, dim.useSupplementaryAngle());
+    const double targetDelta = (currentDelta >= 0.0 ? 1.0 : -1.0) * qDegreesToRadians(newValue);
+    const double targetAngle = a1 + targetDelta;
+
+    Point rotated(vertex.getX() + std::cos(targetAngle) * secondLen,
+                  vertex.getY() + std::sin(targetAngle) * secondLen);
+
+    if (dim.secondAnchor().snapIndex == 0) {
+        secondSegment->setStart(rotated);
+    } else {
+        secondSegment->setEnd(rotated);
+    }
     return true;
 }
 
@@ -481,7 +556,11 @@ bool Dimension::applyMeasuredValue(double newValue)
         if (base && base->getType() == PrimitiveType::Arc) {
             auto* arc = const_cast<Arc*>(static_cast<const Arc*>(base));
             const double sign = arc->getSpanAngle() < 0.0 ? -1.0 : 1.0;
-            arc->setSpanAngle(sign * std::min(newValue, 360.0));
+            const double target = std::min(newValue, 360.0);
+            arc->setSpanAngle(sign * (m_useSupplementaryAngle ? (360.0 - target) : target));
+            return true;
+        }
+        if (setAngleBetweenSegments(*this, newValue)) {
             return true;
         }
     }

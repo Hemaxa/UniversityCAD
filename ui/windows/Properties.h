@@ -39,6 +39,7 @@ public slots:
 signals:
     void objectCreateRequested(Object* obj);
     void objectsModified(const std::vector<Object*>& objs);
+    void dimensionSideToggleRequested();
 
 private slots:
     void onApplyClicked();
@@ -124,6 +125,7 @@ private:
     QComboBox* m_dimArrowPlacementCombo;
     QPushButton* m_dimColorButton;
     QPushButton* m_dimCenterTextButton;
+    QPushButton* m_dimToggleSideButton;
     QLineEdit* m_dimTextOverrideEdit;
     QString m_dimTextOverride;
 

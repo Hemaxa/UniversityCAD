@@ -25,6 +25,7 @@
 #include <QtMath>
 #include <QRubberBand>
 #include <QInputDialog>
+#include <QFontMetricsF>
 #include <limits>
 #include <algorithm>
 
@@ -124,6 +125,33 @@ void Viewport::resetTool() {
     update();
 }
 
+void Viewport::toggleActiveAngularDimensionSide()
+{
+    if (!m_currentTool || m_activeToolType != PrimitiveType::Dimension) {
+        return;
+    }
+    if (auto* dimTool = dynamic_cast<CreateDimensionTool*>(m_currentTool.get())) {
+        dimTool->toggleAngularSide();
+        update();
+    }
+}
+
+void Viewport::editSelectedDimensionValue()
+{
+    if (m_selectedObjects.size() != 1 || !m_selectedObjects.front() || m_selectedObjects.front()->getType() != PrimitiveType::Dimension) {
+        return;
+    }
+
+    auto* dim = static_cast<Dimension*>(m_selectedObjects.front());
+    bool ok = false;
+    double value = QInputDialog::getDouble(this, "Изменить размер", "Значение:", dim->measuredValue(), 0.001, 1000000.0, 2, &ok);
+    if (!ok) return;
+    dim->setTextOverride(QString());
+    dim->applyMeasuredValue(value);
+    emit selectionChanged(m_selectedObjects);
+    update();
+}
+
 void Viewport::paintEvent(QPaintEvent *event) {
     Q_UNUSED(event);
     QPainter painter(this);
@@ -209,12 +237,11 @@ void Viewport::mousePressEvent(QMouseEvent *event) {
             if (getGizmoRect().contains(event->pos())) { m_camera->rotateLeft(); return; }
 
             if (m_scene) {
-                const double textHit = 30.0 / m_camera->getZoomFactor();
                 const auto& primitives = m_scene->getPrimitives();
                 for (auto it = primitives.rbegin(); it != primitives.rend(); ++it) {
                     if ((*it)->getType() != PrimitiveType::Dimension) continue;
                     auto* dim = static_cast<Dimension*>(it->get());
-                    if (MathUtils::dist(worldP, dim->getTextPosition()) <= textHit) {
+                    if (isDimensionTextHit(dim, event->position())) {
                         m_draggingDimensionText = dim;
                         m_selectedObjects = {dim};
                         emit selectionChanged(m_selectedObjects);
@@ -243,9 +270,7 @@ void Viewport::mousePressEvent(QMouseEvent *event) {
             if (clickedObject) {
                 if (clickedObject->getType() == PrimitiveType::Dimension) {
                     auto* dim = static_cast<Dimension*>(clickedObject);
-                    Point tp = dim->getTextPosition();
-                    const double textHit = 28.0 / m_camera->getZoomFactor();
-                    if (MathUtils::dist(worldP, tp) <= textHit) {
+                    if (isDimensionTextHit(dim, event->position())) {
                         m_draggingDimensionText = dim;
                     }
                 }
@@ -376,17 +401,52 @@ void Viewport::mouseDoubleClickEvent(QMouseEvent *event) {
     if (!clickedObject || clickedObject->getType() != PrimitiveType::Dimension) return;
 
     auto* dim = static_cast<Dimension*>(clickedObject);
-    const double textHit = 22.0 / m_camera->getZoomFactor();
-    if (MathUtils::dist(worldP, dim->getTextPosition()) > textHit) return;
+    if (!isDimensionTextHit(dim, event->position())) return;
 
-    bool ok = false;
-    double value = QInputDialog::getDouble(this, "Изменить размер", "Значение:", dim->measuredValue(), 0.001, 1000000.0, 2, &ok);
-    if (!ok) return;
-    dim->setTextOverride(QString());
-    dim->applyMeasuredValue(value);
     m_selectedObjects = {dim};
-    emit selectionChanged(m_selectedObjects);
-    update();
+    editSelectedDimensionValue();
+}
+
+bool Viewport::isDimensionTextHit(const Dimension* dim, const QPointF& screenPos) const
+{
+    if (!dim) return false;
+
+    const QPointF center = worldToScreen(QPointF(dim->getTextPosition().getX(), dim->getTextPosition().getY()));
+    QFont font(dim->fontFamily(), std::max(6, static_cast<int>(dim->textHeight())));
+    QFontMetricsF metrics(font);
+    const QString text = dim->displayText();
+    const double width = std::max(36.0, metrics.horizontalAdvance(text) + 20.0);
+    const double height = std::max(24.0, metrics.height() + 14.0);
+
+    if (dim->getDimensionType() == DimensionType::Angular) {
+        QRectF rect(center.x() - width * 0.5, center.y() - height, width, height * 2.0);
+        return rect.contains(screenPos);
+    }
+
+    double angleDeg = 0.0;
+    Point a = dim->firstAnchor().resolve();
+    Point b = dim->secondAnchor().resolve();
+    if (dim->getDimensionType() == DimensionType::Vertical) {
+        angleDeg = -90.0;
+    } else if (dim->getDimensionType() == DimensionType::Horizontal) {
+        angleDeg = 0.0;
+    } else if (dim->getDimensionType() == DimensionType::Linear) {
+        angleDeg = qRadiansToDegrees(std::atan2(b.getY() - a.getY(), b.getX() - a.getX()));
+    } else if (dim->getDimensionType() == DimensionType::Radius || dim->getDimensionType() == DimensionType::Diameter) {
+        angleDeg = qRadiansToDegrees(std::atan2(dim->getLinePoint().getY() - a.getY(),
+                                                dim->getLinePoint().getX() - a.getX()));
+    }
+
+    while (angleDeg > 180.0) angleDeg -= 360.0;
+    while (angleDeg < -180.0) angleDeg += 360.0;
+    if (angleDeg > 90.0) angleDeg -= 180.0;
+    if (angleDeg < -90.0) angleDeg += 180.0;
+
+    QTransform transform;
+    transform.translate(center.x(), center.y());
+    transform.rotate(angleDeg);
+    const QPolygonF hitBox = transform.map(QRectF(-width * 0.5, -height * 0.5, width, height));
+    return hitBox.containsPoint(screenPos, Qt::OddEvenFill);
 }
 
 bool Viewport::beginDimensionGripDrag(Dimension* dim, const Point& worldPoint)

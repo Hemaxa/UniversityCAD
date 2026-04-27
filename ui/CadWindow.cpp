@@ -72,6 +72,7 @@ void CadWindow::createConnections() {
     connect(m_controlPanel, &Control::primitiveTypeSelected, this, &CadWindow::onPrimitiveTypeSelected);
     connect(m_propertiesPanel, &Properties::objectCreateRequested, this, &CadWindow::onObjectCreateRequested);
     connect(m_propertiesPanel, &Properties::objectsModified, this, &CadWindow::onObjectsModified);
+    connect(m_propertiesPanel, &Properties::dimensionSideToggleRequested, m_viewportPanel, &Viewport::toggleActiveAngularDimensionSide);
     connect(m_viewportPanel, &Viewport::selectionChanged, this, &CadWindow::onObjectsSelected);
     connect(m_controlPanel, &Control::objectsSelected, this, &CadWindow::onObjectsSelectedFromList);
     connect(this, &CadWindow::sceneChanged, m_controlPanel, &Control::updateObjectList);
@@ -90,6 +91,9 @@ void CadWindow::createConnections() {
     auto* backspaceShortcut = new QShortcut(QKeySequence(Qt::Key_Backspace), this);
     backspaceShortcut->setContext(Qt::ApplicationShortcut);
     connect(backspaceShortcut, &QShortcut::activated, this, &CadWindow::onDeleteRequested);
+    auto* dimensionEditShortcut = new QShortcut(QKeySequence(Qt::Key_D), this);
+    dimensionEditShortcut->setContext(Qt::ApplicationShortcut);
+    connect(dimensionEditShortcut, &QShortcut::activated, m_viewportPanel, &Viewport::editSelectedDimensionValue);
 }
 
 void CadWindow::setupDrawingStrategies() {

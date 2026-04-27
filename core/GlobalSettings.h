@@ -29,15 +29,15 @@ struct DimensionStyle {
     QColor textColor = Qt::white;
     LineStyle extensionLineStyle = {LineStyleType::SolidThin, "Сплошная тонкая", 0, 0, false};
     LineStyle dimensionLineStyle = {LineStyleType::SolidThin, "Сплошная тонкая", 0, 0, false};
-    double extensionOvershoot = 6.0;
-    double dimensionExtension = 4.0;
+    double extensionOvershoot = 8.0;
+    double dimensionExtension = 0.0;
     ArrowType arrowType = ArrowType::Closed;
     ArrowPlacement arrowPlacement = ArrowPlacement::Inside;
-    double arrowSize = 10.0;
+    double arrowSize = 12.0;
     bool arrowFilled = true;
-    QString fontFamily = "Arial";
+    QString fontFamily = "Courier New";
     double textHeight = 16.0;
-    double textOffset = 8.0;
+    double textOffset = 10.0;
 };
 
 class GlobalSettings {
