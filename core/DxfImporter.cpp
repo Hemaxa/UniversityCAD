@@ -395,6 +395,7 @@ static std::unique_ptr<Object> createDimensionFromData(const QString& packed)
     dim->setTextOffset(toDouble(23, dim->textOffset()));
     dim->setAngularRadius(toDouble(24, dim->angularRadius()));
     dim->setUseSupplementaryAngle(toInt(25, dim->useSupplementaryAngle() ? 1 : 0) != 0);
+    dim->setValuePrefix(static_cast<DimensionValuePrefix>(toInt(26, static_cast<int>(dim->valuePrefix()))));
     dim->setColor(dim->dimensionColor());
     return dim;
 }

@@ -52,6 +52,7 @@ void Dimension::applyGlobalStyle()
     m_fontFamily = s.fontFamily;
     m_textHeight = s.textHeight;
     m_textOffset = s.textOffset;
+    m_valuePrefix = s.linearPrefix;
     setColor(m_dimensionColor);
     setLineStyle(m_dimensionLineStyle);
 }
@@ -102,7 +103,18 @@ QString Dimension::displayText() const
 {
     if (hasTextOverride()) return m_textOverride;
     const QString suffix = (m_type == DimensionType::Angular) ? QString::fromUtf8("°") : QString();
-    const QString prefix = (m_type == DimensionType::Radius) ? "R" : (m_type == DimensionType::Diameter ? QString::fromUtf8("Ø") : QString());
+    QString prefix;
+    if (m_type == DimensionType::Radius) {
+        prefix = "R";
+    } else if (m_type == DimensionType::Diameter) {
+        prefix = QString::fromUtf8("Ø");
+    } else if (m_type == DimensionType::Linear || m_type == DimensionType::Horizontal || m_type == DimensionType::Vertical) {
+        if (m_valuePrefix == DimensionValuePrefix::Radius) {
+            prefix = "R";
+        } else if (m_valuePrefix == DimensionValuePrefix::Diameter) {
+            prefix = QString::fromUtf8("Ø");
+        }
+    }
     return QString("%1%2%3").arg(prefix).arg(measuredValue(), 0, 'f', 2).arg(suffix);
 }
 

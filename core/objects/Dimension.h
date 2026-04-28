@@ -74,6 +74,8 @@ public:
     void setTextHeight(double v) { m_textHeight = v; }
     double textOffset() const { return m_textOffset; }
     void setTextOffset(double v) { m_textOffset = v; }
+    DimensionValuePrefix valuePrefix() const { return m_valuePrefix; }
+    void setValuePrefix(DimensionValuePrefix prefix) { m_valuePrefix = prefix; }
     double angularRadius() const { return m_angularRadius; }
     void setAngularRadius(double r) { m_angularRadius = r; }
     bool useSupplementaryAngle() const { return m_useSupplementaryAngle; }
@@ -108,6 +110,7 @@ private:
     QString m_fontFamily = "Courier New";
     double m_textHeight = 16.0;
     double m_textOffset = 10.0;
+    DimensionValuePrefix m_valuePrefix = DimensionValuePrefix::None;
     double m_angularRadius = 0.0;
     bool m_useSupplementaryAngle = false;
 };

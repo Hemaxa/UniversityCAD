@@ -123,6 +123,7 @@ private:
     QDoubleSpinBox *m_dimValue, *m_dimArrowSize, *m_dimTextHeight, *m_dimTextOffset;
     QComboBox* m_dimArrowCombo;
     QComboBox* m_dimArrowPlacementCombo;
+    QComboBox* m_dimPrefixCombo;
     QPushButton* m_dimColorButton;
     QPushButton* m_dimCenterTextButton;
     QPushButton* m_dimToggleSideButton;

@@ -61,6 +61,12 @@ enum class DimensionType {
     Angular
 };
 
+enum class DimensionValuePrefix {
+    None,
+    Radius,
+    Diameter
+};
+
 enum class ArrowType {
     Closed,
     Open,

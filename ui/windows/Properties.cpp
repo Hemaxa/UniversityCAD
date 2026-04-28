@@ -641,6 +641,10 @@ QWidget* Properties::createDimensionWidget() {
     m_dimTextOverrideEdit = new QLineEdit();
     m_dimCenterTextButton = new QPushButton("Центрировать");
     m_dimToggleSideButton = new QPushButton("Сменить сторону");
+    m_dimPrefixCombo = new QComboBox();
+    m_dimPrefixCombo->addItem("Нет", static_cast<int>(DimensionValuePrefix::None));
+    m_dimPrefixCombo->addItem("R", static_cast<int>(DimensionValuePrefix::Radius));
+    m_dimPrefixCombo->addItem(QString::fromUtf8("Ø"), static_cast<int>(DimensionValuePrefix::Diameter));
     m_dimArrowCombo = new QComboBox();
     m_dimArrowCombo->addItem(QIcon(":/icons/arrow-open.svg"), "Закрытая", static_cast<int>(ArrowType::Closed));
     m_dimArrowCombo->addItem(QIcon(":/icons/arrow-closed.svg"), "Открытая", static_cast<int>(ArrowType::Open));
@@ -661,8 +665,9 @@ QWidget* Properties::createDimensionWidget() {
     addRow(gl, 5, createLbl("Размер стрелки:"), m_dimArrowSize);
     addRow(gl, 6, createLbl("Размер шрифта:"), m_dimTextHeight);
     addRow(gl, 7, createLbl("Отступ текста:"), m_dimTextOffset);
-    addRow(gl, 8, createLbl("Позиция текста:"), m_dimCenterTextButton);
-    addRow(gl, 9, createLbl("Сторона угла:"), m_dimToggleSideButton);
+    addRow(gl, 8, createLbl("Префикс:"), m_dimPrefixCombo);
+    addRow(gl, 9, createLbl("Позиция текста:"), m_dimCenterTextButton);
+    addRow(gl, 10, createLbl("Сторона угла:"), m_dimToggleSideButton);
 
     connect(m_dimCenterTextButton, &QPushButton::clicked, this, [this]() {
         for (auto* obj : m_currentObjects) {
@@ -686,6 +691,14 @@ QWidget* Properties::createDimensionWidget() {
         }
         emit objectsModified(m_currentObjects);
         if (!m_currentObjects.empty()) populateFields(m_currentObjects.front());
+    });
+
+    connect(m_dimPrefixCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        if (!m_isCreationMode || m_activeType != PrimitiveType::Dimension) {
+            return;
+        }
+        GlobalSettings::instance().dimensionStyle.linearPrefix =
+            static_cast<DimensionValuePrefix>(m_dimPrefixCombo->currentData().toInt());
     });
 
     return gb;
@@ -876,6 +889,10 @@ void Properties::showCreationPropertiesFor(PrimitiveType type, int methodIndex) 
         m_dimToggleSideButton->setVisible(type == PrimitiveType::Dimension
                                           && methodIndex == static_cast<int>(DimensionType::Angular));
     }
+    if (type == PrimitiveType::Dimension && m_dimPrefixCombo) {
+        const int idx = m_dimPrefixCombo->findData(static_cast<int>(GlobalSettings::instance().dimensionStyle.linearPrefix));
+        if (idx >= 0) m_dimPrefixCombo->setCurrentIndex(idx);
+    }
 
     m_stylePresetButton->setText(m_currentStyle.name);
     m_colorButton->setStyleSheet(QString("background-color: %1").arg(m_selectedColor.name()));
@@ -1002,6 +1019,8 @@ void Properties::populateFields(Object* obj) {
         if (arrowIdx >= 0) m_dimArrowCombo->setCurrentIndex(arrowIdx);
         int placementIdx = m_dimArrowPlacementCombo->findData(static_cast<int>(d->arrowPlacement()));
         if (placementIdx >= 0) m_dimArrowPlacementCombo->setCurrentIndex(placementIdx);
+        int prefixIdx = m_dimPrefixCombo->findData(static_cast<int>(d->valuePrefix()));
+        if (prefixIdx >= 0) m_dimPrefixCombo->setCurrentIndex(prefixIdx);
         m_dimArrowSize->setValue(d->arrowSize());
         m_dimTextHeight->setValue(d->textHeight());
         m_dimTextOffset->setValue(d->textOffset());
@@ -1201,6 +1220,7 @@ void Properties::updateObjectGeometry(Object* obj) {
             d->setArrowSize(m_dimArrowSize->value());
             d->setTextHeight(m_dimTextHeight->value());
             d->setTextOffset(m_dimTextOffset->value());
+            d->setValuePrefix(static_cast<DimensionValuePrefix>(m_dimPrefixCombo->currentData().toInt()));
             d->setDimensionColor(m_selectedColor);
             d->setTextColor(m_selectedColor);
             d->setExtensionColor(m_selectedColor);

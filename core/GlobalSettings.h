@@ -38,6 +38,7 @@ struct DimensionStyle {
     QString fontFamily = "Courier New";
     double textHeight = 16.0;
     double textOffset = 10.0;
+    DimensionValuePrefix linearPrefix = DimensionValuePrefix::None;
 };
 
 class GlobalSettings {
